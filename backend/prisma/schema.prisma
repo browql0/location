@@ -1,0 +1,781 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  AGENCY_ADMIN
+  STAFF
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum AgencyStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum CarStatus {
+  AVAILABLE
+  RENTED
+  MAINTENANCE
+  INACTIVE
+}
+
+enum ReservationStatus {
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  REFUNDED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  CANCELLED
+}
+
+enum IncidentType {
+  LATE_PAYMENT
+  DAMAGED_CAR
+  NON_RETURN
+  FINE
+  BAD_BEHAVIOR
+  FAKE_DOCUMENT
+  OTHER
+}
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum IncidentStatus {
+  PENDING
+  VALIDATED
+  REJECTED
+}
+
+enum FileEntityType {
+  AGENCY
+  CAR
+  CLIENT
+  CONTRACT
+  INVOICE
+  INCIDENT
+  EXPENSE
+  MAINTENANCE
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  DISABLE
+  ENABLE
+  VALIDATE
+  REJECT
+  DOWNLOAD
+  SEND_EMAIL
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  EXPIRED
+  CANCELLED
+  SUSPENDED
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
+enum ExpenseType {
+  INSURANCE
+  REPAIR
+  FUEL
+  WASH
+  TAX
+  MAINTENANCE
+  OTHER
+}
+
+enum MaintenanceType {
+  OIL_CHANGE
+  TIRES
+  BRAKES
+  ENGINE
+  BODYWORK
+  TECHNICAL_VISIT
+  GENERAL_SERVICE
+  OTHER
+}
+
+enum ReminderType {
+  INSURANCE_EXPIRY
+  TECHNICAL_VISIT_EXPIRY
+  RESERVATION_ENDING
+  SUBSCRIPTION_EXPIRY
+  VEHICLE_MAINTENANCE
+  CUSTOM
+}
+
+enum ReminderStatus {
+  PENDING
+  SENT
+  DISMISSED
+  CANCELLED
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+  WHATSAPP
+}
+
+enum CommunicationStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum ClientTrustLevel {
+  TRUSTED
+  WATCHLIST
+  RISKY
+}
+
+enum ClientDocumentType {
+  CIN_FRONT
+  CIN_BACK
+  DRIVER_LICENSE_FRONT
+  DRIVER_LICENSE_BACK
+  PASSPORT
+  SIGNED_CONTRACT
+  OTHER
+}
+
+model Agency {
+  id        String       @id @default(cuid())
+  name      String
+  logoUrl   String?
+  email     String
+  phone     String?
+  address   String?
+  city      String?
+  country   String?      @default("Morocco")
+  status    AgencyStatus @default(ACTIVE)
+
+  users                 User[]
+  cars                  Car[]
+  clients               Client[]
+  reservations          Reservation[]
+  contracts             Contract[]
+  invoices              Invoice[]
+  incidents             Incident[]
+  settings              AgencySettings?
+  auditLogs             AuditLog[]
+  subscriptions         Subscription[]
+  expenses              Expense[]
+  maintenanceRecords    MaintenanceRecord[]
+  reminders             Reminder[]
+  securityDeposits      SecurityDeposit[]
+  mileageLogs           VehicleMileageLog[]
+  communicationMessages CommunicationMessage[]
+  notifications         Notification[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([status])
+  @@index([email])
+}
+
+model AgencySettings {
+  id               String @id @default(cuid())
+  agencyId         String @unique
+  agency           Agency @relation(fields: [agencyId], references: [id])
+  invoicePrefix    String @default("INV")
+  contractPrefix   String @default("CTR")
+  currency         String @default("MAD")
+  timezone         String @default("Africa/Casablanca")
+  emailFromName    String?
+  emailFromAddress String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SubscriptionPlan {
+  id                    String  @id @default(cuid())
+  name                  String  @unique
+  description           String?
+  priceMonthly          Decimal @db.Decimal(10, 2)
+  priceYearly           Decimal? @db.Decimal(10, 2)
+  currency              String  @default("MAD")
+  trialDays             Int     @default(30)
+  maxUsers              Int?
+  maxCars               Int?
+  maxClients            Int?
+  maxReservations       Int?
+  maxAgencies           Int?
+  canUseInvoices        Boolean @default(true)
+  canUseContracts       Boolean @default(true)
+  canUseIncidents       Boolean @default(false)
+  canUseAdvancedReports Boolean @default(false)
+  canUseApiAccess       Boolean @default(false)
+  isActive              Boolean @default(true)
+  sortOrder             Int     @default(0)
+
+  subscriptions Subscription[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Subscription {
+  id              String             @id @default(cuid())
+  agencyId        String
+  agency          Agency             @relation(fields: [agencyId], references: [id])
+  planId          String
+  plan            SubscriptionPlan   @relation(fields: [planId], references: [id])
+  status          SubscriptionStatus @default(TRIALING)
+  billingInterval BillingInterval?
+  startsAt        DateTime
+  endsAt          DateTime
+  trialEndsAt     DateTime?
+  cancelledAt     DateTime?
+  suspendedAt     DateTime?
+  amount          Decimal?           @db.Decimal(10, 2)
+  currency        String             @default("MAD")
+  previousPlanId  String?
+  metadata        Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([agencyId])
+  @@index([planId])
+  @@index([status])
+  @@index([startsAt, endsAt])
+}
+
+model User {
+  id           String     @id @default(cuid())
+  agencyId     String?
+  agency       Agency?    @relation(fields: [agencyId], references: [id])
+  firstName    String
+  lastName     String
+  email        String     @unique
+  phone        String?
+  passwordHash String
+  role         UserRole
+  status       UserStatus @default(ACTIVE)
+  permissions  String[]   @default([])
+
+  refreshTokens       RefreshToken[]
+  auditLogs           AuditLog[]
+  createdReservations Reservation[] @relation("ReservationCreatedBy")
+  validatedIncidents  Incident[]    @relation("IncidentValidatedBy")
+
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([agencyId])
+  @@index([role])
+  @@index([status])
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  tokenHash String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Car {
+  id                  String    @id @default(cuid())
+  agencyId            String
+  agency              Agency    @relation(fields: [agencyId], references: [id])
+  brand               String
+  model               String
+  year                Int
+  licensePlate        String
+  dailyPrice          Decimal   @db.Decimal(10, 2)
+  mileage             Int       @default(0)
+  status              CarStatus @default(AVAILABLE)
+  insuranceExpiryDate DateTime?
+  technicalVisitDate  DateTime?
+  description         String?
+
+  photos             CarPhoto[]
+  reservations       Reservation[]
+  expenses           Expense[]
+  maintenanceRecords MaintenanceRecord[]
+  mileageLogs        VehicleMileageLog[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([agencyId, licensePlate])
+  @@index([agencyId])
+  @@index([status])
+  @@index([insuranceExpiryDate])
+  @@index([technicalVisitDate])
+}
+
+model CarPhoto {
+  id        String @id @default(cuid())
+  carId     String
+  car       Car    @relation(fields: [carId], references: [id])
+  url       String
+  sortOrder Int    @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([carId])
+}
+
+model Client {
+  id                 String  @id @default(cuid())
+  agencyId           String
+  agency             Agency  @relation(fields: [agencyId], references: [id])
+  firstName          String
+  lastName           String
+  phone              String?
+  email              String?
+  cinOrPassport      String?
+  drivingLicense     String?
+  address            String?
+  normalizedIdentity String?
+
+  documents    ClientDocument[]
+  reservations Reservation[]
+  incidents    Incident[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([agencyId])
+  @@index([phone])
+  @@index([email])
+  @@index([cinOrPassport])
+  @@index([normalizedIdentity])
+}
+
+model ClientDocument {
+  id       String             @id @default(cuid())
+  clientId String
+  client   Client             @relation(fields: [clientId], references: [id])
+  fileId   String
+  file     File               @relation(fields: [fileId], references: [id])
+  type     ClientDocumentType
+
+  createdAt DateTime @default(now())
+
+  @@index([clientId])
+  @@index([type])
+}
+
+model ClientRiskProfile {
+  id                     String              @id @default(cuid())
+  normalizedIdentity     String              @unique
+  trustedClient          Boolean             @default(false)
+  rentalCount            Int                 @default(0)
+  validatedIncidentCount Int                 @default(0)
+  maxSeverity            IncidentSeverity?
+  incidentTypes          IncidentType[]      @default([])
+  trustScore             Int                 @default(50)
+  riskScore              Int                 @default(0)
+  trustLevel             ClientTrustLevel    @default(WATCHLIST)
+  lastIncidentAt         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([riskScore])
+  @@index([trustScore])
+  @@index([validatedIncidentCount])
+}
+
+model Reservation {
+  id              String            @id @default(cuid())
+  agencyId        String
+  agency          Agency            @relation(fields: [agencyId], references: [id])
+  clientId        String
+  client          Client            @relation(fields: [clientId], references: [id])
+  carId           String
+  car             Car               @relation(fields: [carId], references: [id])
+  createdById     String?
+  createdBy       User?             @relation("ReservationCreatedBy", fields: [createdById], references: [id])
+  startDate       DateTime
+  endDate         DateTime
+  totalDays       Int
+  dailyPrice      Decimal           @db.Decimal(10, 2)
+  totalAmount     Decimal           @db.Decimal(10, 2)
+  advanceAmount   Decimal           @db.Decimal(10, 2)
+  remainingAmount Decimal           @db.Decimal(10, 2)
+  depositAmount   Decimal?          @db.Decimal(10, 2)
+  status          ReservationStatus @default(CONFIRMED)
+  paymentStatus   PaymentStatus     @default(PARTIAL)
+  notes           String?
+  pickupMileage   Int?
+  returnMileage   Int?
+  pickupFuelLevel Int?
+  returnFuelLevel Int?
+  pickupCondition String?
+  returnCondition String?
+
+  contract        Contract?
+  invoices        Invoice[]
+  payments        Payment[]
+  securityDeposit SecurityDeposit?
+  mileageLogs     VehicleMileageLog[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  cancelledAt DateTime?
+
+  @@index([agencyId])
+  @@index([clientId])
+  @@index([carId])
+  @@index([status])
+  @@index([startDate, endDate])
+  @@index([carId, startDate, endDate, status])
+}
+
+model Contract {
+  id              String      @id @default(cuid())
+  agencyId        String
+  agency          Agency      @relation(fields: [agencyId], references: [id])
+  reservationId   String      @unique
+  reservation     Reservation @relation(fields: [reservationId], references: [id])
+  contractNumber  String
+  pdfUrl          String?
+  signedByClient  Boolean     @default(false)
+  signedByAgency  Boolean     @default(false)
+  archivedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([agencyId, contractNumber])
+  @@index([agencyId])
+}
+
+model Invoice {
+  id              String        @id @default(cuid())
+  agencyId        String
+  agency          Agency        @relation(fields: [agencyId], references: [id])
+  reservationId   String
+  reservation     Reservation   @relation(fields: [reservationId], references: [id])
+  invoiceNumber   String
+  status          InvoiceStatus @default(DRAFT)
+  totalAmount     Decimal       @db.Decimal(10, 2)
+  advanceAmount   Decimal       @db.Decimal(10, 2)
+  remainingAmount Decimal       @db.Decimal(10, 2)
+  pdfUrl          String?
+  sentToClientAt  DateTime?
+  sentToAgencyAt  DateTime?
+  paidAt          DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([agencyId, invoiceNumber])
+  @@index([agencyId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Payment {
+  id            String      @id @default(cuid())
+  reservationId String
+  reservation   Reservation @relation(fields: [reservationId], references: [id])
+  amount        Decimal     @db.Decimal(10, 2)
+  method        String?
+  note          String?
+  paidAt        DateTime    @default(now())
+
+  createdAt DateTime @default(now())
+
+  @@index([reservationId])
+}
+
+model SecurityDeposit {
+  id              String      @id @default(cuid())
+  agencyId        String
+  agency          Agency      @relation(fields: [agencyId], references: [id])
+  reservationId   String      @unique
+  reservation     Reservation @relation(fields: [reservationId], references: [id])
+  amount          Decimal     @db.Decimal(10, 2)
+  collectedAmount Decimal     @default(0) @db.Decimal(10, 2)
+  refundedAmount  Decimal     @default(0) @db.Decimal(10, 2)
+  retainedAmount  Decimal     @default(0) @db.Decimal(10, 2)
+  retentionReason String?
+  collectedAt     DateTime?
+  refundedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([agencyId])
+  @@index([reservationId])
+}
+
+model Expense {
+  id          String      @id @default(cuid())
+  agencyId    String
+  agency      Agency      @relation(fields: [agencyId], references: [id])
+  carId       String?
+  car         Car?        @relation(fields: [carId], references: [id])
+  type        ExpenseType
+  amount      Decimal     @db.Decimal(10, 2)
+  date        DateTime
+  title       String
+  description String?
+  vendor      String?
+  attachments File[]      @relation("ExpenseAttachments")
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([agencyId])
+  @@index([carId])
+  @@index([type])
+  @@index([date])
+}
+
+model MaintenanceRecord {
+  id          String          @id @default(cuid())
+  agencyId    String
+  agency      Agency          @relation(fields: [agencyId], references: [id])
+  carId       String
+  car         Car             @relation(fields: [carId], references: [id])
+  date        DateTime
+  type        MaintenanceType
+  cost        Decimal?        @db.Decimal(10, 2)
+  garage      String?
+  description String?
+  attachments File[]          @relation("MaintenanceAttachments")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([agencyId])
+  @@index([carId])
+  @@index([date])
+  @@index([type])
+}
+
+model VehicleMileageLog {
+  id            String       @id @default(cuid())
+  agencyId      String
+  agency        Agency       @relation(fields: [agencyId], references: [id])
+  carId         String
+  car           Car          @relation(fields: [carId], references: [id])
+  reservationId String?
+  reservation   Reservation? @relation(fields: [reservationId], references: [id])
+  mileage       Int
+  loggedAt      DateTime
+  note          String?
+
+  createdAt DateTime @default(now())
+
+  @@index([agencyId])
+  @@index([carId])
+  @@index([reservationId])
+  @@index([loggedAt])
+}
+
+model Incident {
+  id            String           @id @default(cuid())
+  agencyId      String
+  agency        Agency           @relation(fields: [agencyId], references: [id])
+  clientId      String
+  client        Client           @relation(fields: [clientId], references: [id])
+  type          IncidentType
+  severity      IncidentSeverity
+  status        IncidentStatus   @default(PENDING)
+  title         String
+  description   String?
+  privateNotes  String?
+  validatedById String?
+  validatedBy   User?            @relation("IncidentValidatedBy", fields: [validatedById], references: [id])
+  validatedAt   DateTime?
+  rejectedAt    DateTime?
+
+  evidences IncidentEvidence[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([agencyId])
+  @@index([clientId])
+  @@index([type])
+  @@index([severity])
+  @@index([status])
+}
+
+model IncidentEvidence {
+  id         String   @id @default(cuid())
+  incidentId String
+  incident   Incident @relation(fields: [incidentId], references: [id])
+  fileId     String
+  file       File     @relation(fields: [fileId], references: [id])
+  note       String?
+
+  createdAt DateTime @default(now())
+
+  @@index([incidentId])
+}
+
+model Reminder {
+  id          String                @id @default(cuid())
+  agencyId    String?
+  agency      Agency?               @relation(fields: [agencyId], references: [id])
+  type        ReminderType
+  status      ReminderStatus        @default(PENDING)
+  title       String
+  message     String
+  dueAt       DateTime
+  sentAt      DateTime?
+  dismissedAt DateTime?
+  entityType  String?
+  entityId    String?
+  channels    NotificationChannel[] @default([IN_APP])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([agencyId])
+  @@index([type])
+  @@index([status])
+  @@index([dueAt])
+  @@index([entityType, entityId])
+}
+
+model Notification {
+  id       String  @id @default(cuid())
+  agencyId String?
+  agency   Agency? @relation(fields: [agencyId], references: [id])
+  userId   String?
+  title    String
+  message  String
+  type     String
+  readAt   DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([agencyId])
+  @@index([userId])
+  @@index([readAt])
+}
+
+model CommunicationMessage {
+  id          String              @id @default(cuid())
+  agencyId    String?
+  agency      Agency?             @relation(fields: [agencyId], references: [id])
+  channel     NotificationChannel
+  status      CommunicationStatus @default(PENDING)
+  recipient   String
+  subject     String?
+  body        String?
+  templateKey String?
+  payload     Json?
+  entityType  String?
+  entityId    String?
+  sentAt      DateTime?
+  failedAt    DateTime?
+  error       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([agencyId])
+  @@index([channel])
+  @@index([status])
+  @@index([entityType, entityId])
+}
+
+model File {
+  id         String         @id @default(cuid())
+  agencyId   String?
+  entityType FileEntityType
+  entityId   String?
+  filename   String
+  mimeType   String
+  size       Int
+  url        String
+  storageKey String
+
+  clientDocuments       ClientDocument[]
+  incidentEvidences     IncidentEvidence[]
+  expenseAttachments    Expense[]          @relation("ExpenseAttachments")
+  maintenanceAttachments MaintenanceRecord[] @relation("MaintenanceAttachments")
+
+  createdAt DateTime @default(now())
+
+  @@index([agencyId])
+  @@index([entityType, entityId])
+}
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  agencyId  String?
+  agency    Agency?     @relation(fields: [agencyId], references: [id])
+  userId    String?
+  user      User?       @relation(fields: [userId], references: [id])
+  action    AuditAction
+  entity    String
+  entityId  String?
+  metadata  Json?
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([agencyId])
+  @@index([userId])
+  @@index([action])
+  @@index([entity])
+  @@index([createdAt])
+}
