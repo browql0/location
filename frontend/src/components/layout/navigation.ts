@@ -34,9 +34,9 @@ export const navigationGroups: NavGroup[] = [
   {
     label: "Administration",
     items: [
-      { label: "Agences", href: "/agencies", icon: Building2, disabled: true },
-      { label: "Abonnements", href: "/subscriptions", icon: CreditCard, disabled: true },
-      { label: "Plans", href: "/plans", icon: BadgeDollarSign, disabled: true }
+      { label: "Agences", href: "/super-admin/agencies", icon: Building2 },
+      { label: "Abonnements", href: "/super-admin/subscriptions", icon: CreditCard },
+      { label: "Plans", href: "/super-admin/plans", icon: BadgeDollarSign }
     ]
   },
   {
@@ -63,7 +63,7 @@ export const navigationGroups: NavGroup[] = [
       { label: "Blacklist", href: "/blacklist", icon: Ban, disabled: true }
     ]
   },
-  { label: "Systeme", items: [{ label: "Parametres", href: "/settings", icon: Settings, disabled: true }] }
+  { label: "Systeme", items: [{ label: "Parametres", href: "/settings/subscription", icon: Settings }] }
 ];
 
 export const brandIcon = WalletCards;

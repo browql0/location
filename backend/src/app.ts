@@ -9,6 +9,10 @@ import { errorMiddleware } from "./middlewares/error.middleware.js";
 import { notFoundMiddleware } from "./middlewares/not-found.middleware.js";
 import { healthRouter } from "./modules/health/health.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
+import { agencyRouter } from "./modules/agencies/agency.routes.js";
+import { dashboardRouter } from "./modules/dashboard/dashboard.routes.js";
+import { subscriptionPlanRouter } from "./modules/subscription-plans/subscription-plan.routes.js";
+import { subscriptionRouter } from "./modules/subscriptions/subscription.routes.js";
 
 export const app = express();
 
@@ -24,6 +28,10 @@ if (env.NODE_ENV !== "test") {
 
 app.use(`${env.API_PREFIX}/health`, healthRouter);
 app.use(`${env.API_PREFIX}/auth`, authRouter);
+app.use(`${env.API_PREFIX}/dashboard`, dashboardRouter);
+app.use(`${env.API_PREFIX}/subscription-plans`, subscriptionPlanRouter);
+app.use(`${env.API_PREFIX}/agencies`, agencyRouter);
+app.use(`${env.API_PREFIX}/subscriptions`, subscriptionRouter);
 
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);

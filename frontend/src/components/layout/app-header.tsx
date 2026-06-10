@@ -8,6 +8,7 @@ import { ThemeToggle } from "./theme-toggle";
 
 const breadcrumbLabels: Record<string, string> = {
   dashboard: "Dashboard",
+  "super-admin": "Super Admin",
   agencies: "Agences",
   subscriptions: "Abonnements",
   plans: "Plans",

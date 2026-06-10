@@ -5,9 +5,14 @@ import { DashboardPage } from "@/pages/dashboard-page";
 import { LoginPage } from "@/pages/login-page";
 import { NotFoundPage } from "@/pages/not-found-page";
 import { RegisterAgencyPage } from "@/pages/register-agency-page";
+import { SettingsSubscriptionPage } from "@/pages/settings-subscription-page";
+import { SuperAdminAgenciesPage } from "@/pages/super-admin-agencies-page";
+import { SuperAdminPlansPage } from "@/pages/super-admin-plans-page";
+import { SuperAdminSubscriptionsPage } from "@/pages/super-admin-subscriptions-page";
 import { UnauthorizedPage } from "@/pages/unauthorized-page";
 import { PermissionGuard } from "./permission-guard";
 import { ProtectedRoute } from "./protected-route";
+import { RoleGuard } from "./role-guard";
 
 export const router = createBrowserRouter([
   {
@@ -44,6 +49,27 @@ export const router = createBrowserRouter([
                     element: <DashboardPage />
                   }
                 ]
+              },
+              {
+                element: <RoleGuard roles={["SUPER_ADMIN"]} />,
+                children: [
+                  {
+                    path: "super-admin/agencies",
+                    element: <SuperAdminAgenciesPage />
+                  },
+                  {
+                    path: "super-admin/plans",
+                    element: <SuperAdminPlansPage />
+                  },
+                  {
+                    path: "super-admin/subscriptions",
+                    element: <SuperAdminSubscriptionsPage />
+                  }
+                ]
+              },
+              {
+                path: "settings/subscription",
+                element: <SettingsSubscriptionPage />
               }
             ]
           }

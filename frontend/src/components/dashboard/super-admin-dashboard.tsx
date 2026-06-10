@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Building2, CreditCard, Users, Wallet } from "lucide-react";
 import { AppPageHeader } from "@/components/ui-custom/app-page-header";
@@ -9,6 +10,7 @@ import { StatCard } from "@/components/ui-custom/stat-card";
 import { StatusBadge } from "@/components/ui-custom/status-badge";
 import { moduleEmptyStates } from "@/components/shared/module-empty-states";
 import { useAuth } from "@/features/auth/auth-provider";
+import { getDashboardKpis, type DashboardKpis } from "@/features/saas/saas-api";
 import { agencyPreviewData, type AgencyPreview } from "./dashboard-mock-data";
 import { RevenueChart } from "./revenue-chart";
 import { SubscriptionsChart } from "./subscriptions-chart";
@@ -40,6 +42,13 @@ const columns: ColumnDef<AgencyPreview>[] = [
 
 export function SuperAdminDashboard() {
   const { user } = useAuth();
+  const [kpis, setKpis] = useState<DashboardKpis | null>(null);
+
+  useEffect(() => {
+    getDashboardKpis().then(setKpis).catch(() => setKpis(null));
+  }, []);
+
+  const revenue = `${(kpis?.revenueSaas ?? 0).toLocaleString("fr-MA")} MAD`;
 
   return (
     <PageContainer>
@@ -50,10 +59,10 @@ export function SuperAdminDashboard() {
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard description="Agences actives et en essai" icon={Building2} title="Agences" trend={{ direction: "up", value: "+12%" }} value="86" />
-        <StatCard description="Plans payants et trials" icon={CreditCard} title="Abonnements" trend={{ direction: "up", value: "+8%" }} value="68" />
-        <StatCard description="Tous roles confondus" icon={Users} title="Utilisateurs" trend={{ direction: "up", value: "+21" }} value="412" />
-        <StatCard description="Revenu mensuel recurrent" icon={Wallet} title="Revenus SaaS" trend={{ direction: "up", value: "+18%" }} value="38.4k MAD" />
+        <StatCard description="Agences en base PostgreSQL" icon={Building2} title="Agences" value={String(kpis?.agencies ?? "-")} />
+        <StatCard description="Abonnements actifs, trial et past due" icon={CreditCard} title="Abonnements" value={String(kpis?.subscriptions ?? "-")} />
+        <StatCard description="Utilisateurs reels" icon={Users} title="Utilisateurs" value={String(kpis?.users ?? "-")} />
+        <StatCard description="MRR calcule depuis les abonnements actifs" icon={Wallet} title="Revenus SaaS" value={revenue} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
