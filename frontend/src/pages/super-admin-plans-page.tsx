@@ -9,6 +9,7 @@ import { DataTable } from "@/components/ui-custom/data-table";
 import { PageContainer } from "@/components/ui-custom/page-container";
 import { StatusBadge } from "@/components/ui-custom/status-badge";
 import { createPlan, listPlans, setPlanActive, updatePlan, type SubscriptionPlan } from "@/features/saas/saas-api";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 type PlanForm = {
   id?: string;
@@ -75,11 +76,15 @@ export function SuperAdminPlansPage() {
   const [form, setForm] = useState<PlanForm>(emptyForm);
 
   async function load() {
-    setPlans(await listPlans());
+    try {
+      setPlans(await listPlans());
+    } catch (error) {
+      toast.error("Chargement impossible", { description: getApiErrorMessage(error) });
+    }
   }
 
   useEffect(() => {
-    load();
+    void load();
   }, []);
 
   const columns = useMemo<ColumnDef<SubscriptionPlan>[]>(
@@ -102,9 +107,13 @@ export function SuperAdminPlansPage() {
               type="button"
               variant="outline"
               onClick={async () => {
-                await setPlanActive(row.original.id, !row.original.isActive);
-                toast.success(row.original.isActive ? "Plan desactive" : "Plan reactive");
-                await load();
+                try {
+                  await setPlanActive(row.original.id, !row.original.isActive);
+                  toast.success(row.original.isActive ? "Plan desactive" : "Plan reactive");
+                  await load();
+                } catch (error) {
+                  toast.error("Action impossible", { description: getApiErrorMessage(error) });
+                }
               }}
             >
               {row.original.isActive ? "Desactiver" : "Reactiver"}
@@ -124,11 +133,15 @@ export function SuperAdminPlansPage() {
           className="grid gap-3 md:grid-cols-5"
           onSubmit={async (event) => {
             event.preventDefault();
-            if (form.id) await updatePlan(form.id, payload(form));
-            else await createPlan(payload(form));
-            toast.success(form.id ? "Plan modifie" : "Plan cree");
-            setForm(emptyForm);
-            await load();
+            try {
+              if (form.id) await updatePlan(form.id, payload(form));
+              else await createPlan(payload(form));
+              toast.success(form.id ? "Plan modifie" : "Plan cree");
+              setForm(emptyForm);
+              await load();
+            } catch (error) {
+              toast.error("Enregistrement impossible", { description: getApiErrorMessage(error) });
+            }
           }}
         >
           {(["name", "priceMonthly", "priceYearly", "trialDays", "maxUsers", "maxCars", "maxClients", "maxReservations"] as const).map((key) => (

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { api, hasAccessToken, setAccessToken, setAuthFailureHandler, setTokenRefreshHandler } from "@/lib/axios";
+import { getApiErrorMessage } from "@/lib/api-error";
 import type { AuthResponse, AuthUser } from "@/types/auth";
 import type { LoginFormValues, RegisterAgencyFormValues } from "./auth.schemas";
 
@@ -18,8 +19,8 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function dashboardPathForRole() {
-  return "/dashboard";
+function dashboardPathForRole(role: AuthUser["role"]) {
+  return role === "SUPER_ADMIN" ? "/super-admin/dashboard" : "/agency/dashboard";
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -78,7 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await api.post<AuthResponse>("/auth/login", values);
       applyAuth(response.data);
       toast.success("Connexion réussie");
-      navigate(dashboardPathForRole(), { replace: true });
+      navigate(dashboardPathForRole(response.data.user.role), { replace: true });
     },
     [applyAuth, navigate]
   );
@@ -103,7 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       applyAuth(response.data);
       toast.success("Agence créée avec essai gratuit activé");
-      navigate(dashboardPathForRole(), { replace: true });
+      navigate(dashboardPathForRole(response.data.user.role), { replace: true });
     },
     [applyAuth, navigate]
   );
@@ -111,6 +112,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     try {
       await api.post("/auth/logout");
+    } catch (error) {
+      toast.error("Déconnexion distante impossible", { description: getApiErrorMessage(error) });
     } finally {
       clearAuth();
       toast.success("Déconnexion réussie");

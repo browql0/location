@@ -15,6 +15,18 @@ export const agencyScopeMiddleware: RequestHandler = (req, _res, next) => {
     return next(new AppError("Agency context is required", 403, "AGENCY_REQUIRED"));
   }
 
+  if (typeof req.query.agencyId === "string" && req.query.agencyId !== req.auth.agencyId) {
+    return next(new AppError("Access to another agency is forbidden", 403, "FORBIDDEN"));
+  }
+
+  if (req.body && typeof req.body === "object" && "agencyId" in req.body && req.body.agencyId && req.body.agencyId !== req.auth.agencyId) {
+    return next(new AppError("Access to another agency is forbidden", 403, "FORBIDDEN"));
+  }
+
   req.query.agencyId = req.auth.agencyId;
+  if (req.body && typeof req.body === "object") {
+    req.body.agencyId = req.auth.agencyId;
+  }
+
   next();
 };

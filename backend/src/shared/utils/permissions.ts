@@ -1,9 +1,13 @@
 import { UserRole } from "@prisma/client";
 
 export const permissions = [
+  "users:read",
   "users:create",
   "users:update",
+  "users:disable",
+  "users:enable",
   "users:delete",
+  "users:permissions",
   "agencies:read",
   "agencies:update",
   "subscriptions:read",
@@ -30,9 +34,15 @@ export const permissions = [
 export type Permission = (typeof permissions)[number];
 
 const agencyAdminPermissions: Permission[] = [
+  "users:read",
   "users:create",
   "users:update",
+  "users:disable",
+  "users:enable",
   "users:delete",
+  "users:permissions",
+  "agencies:read",
+  "agencies:update",
   "subscriptions:read",
   "cars:read",
   "cars:create",
@@ -53,19 +63,6 @@ const agencyAdminPermissions: Permission[] = [
   "dashboard:read"
 ];
 
-const staffDefaultPermissions: Permission[] = [
-  "cars:read",
-  "clients:read",
-  "clients:create",
-  "clients:update",
-  "reservations:read",
-  "reservations:create",
-  "reservations:update",
-  "invoices:read",
-  "contracts:read",
-  "dashboard:read"
-];
-
 export function getRolePermissions(role: UserRole): Permission[] {
   if (role === UserRole.SUPER_ADMIN) {
     return [...permissions];
@@ -75,7 +72,7 @@ export function getRolePermissions(role: UserRole): Permission[] {
     return agencyAdminPermissions;
   }
 
-  return staffDefaultPermissions;
+  return [];
 }
 
 export function mergeUserPermissions(role: UserRole, userPermissions: string[]): Permission[] {
@@ -85,5 +82,5 @@ export function mergeUserPermissions(role: UserRole, userPermissions: string[]):
 
   const allowed = new Set<Permission>(permissions);
   const custom = userPermissions.filter((permission): permission is Permission => allowed.has(permission as Permission));
-  return Array.from(new Set([...getRolePermissions(role), ...custom]));
+  return Array.from(new Set(custom));
 }

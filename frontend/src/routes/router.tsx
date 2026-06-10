@@ -1,12 +1,16 @@
 import { createBrowserRouter, Navigate, Outlet } from "react-router-dom";
 import { AppLayout } from "@/components/layout/app-layout";
 import { AuthProvider } from "@/features/auth/auth-provider";
+import { AgencyDashboardPage } from "@/pages/agency-dashboard-page";
 import { DashboardPage } from "@/pages/dashboard-page";
 import { LoginPage } from "@/pages/login-page";
 import { NotFoundPage } from "@/pages/not-found-page";
+import { ProfilePage } from "@/pages/profile-page";
 import { RegisterAgencyPage } from "@/pages/register-agency-page";
 import { SettingsSubscriptionPage } from "@/pages/settings-subscription-page";
+import { StaffPage } from "@/pages/staff-page";
 import { SuperAdminAgenciesPage } from "@/pages/super-admin-agencies-page";
+import { SuperAdminDashboardPage } from "@/pages/super-admin-dashboard-page";
 import { SuperAdminPlansPage } from "@/pages/super-admin-plans-page";
 import { SuperAdminSubscriptionsPage } from "@/pages/super-admin-subscriptions-page";
 import { UnauthorizedPage } from "@/pages/unauthorized-page";
@@ -51,8 +55,34 @@ export const router = createBrowserRouter([
                 ]
               },
               {
+                element: <PermissionGuard permissions={["dashboard:read"]} />,
+                children: [
+                  {
+                    path: "agency/dashboard",
+                    element: <AgencyDashboardPage />
+                  }
+                ]
+              },
+              {
+                element: <PermissionGuard permissions={["users:read"]} />,
+                children: [
+                  {
+                    path: "staff",
+                    element: <StaffPage />
+                  }
+                ]
+              },
+              {
+                path: "profile",
+                element: <ProfilePage />
+              },
+              {
                 element: <RoleGuard roles={["SUPER_ADMIN"]} />,
                 children: [
+                  {
+                    path: "super-admin/dashboard",
+                    element: <SuperAdminDashboardPage />
+                  },
                   {
                     path: "super-admin/agencies",
                     element: <SuperAdminAgenciesPage />
@@ -68,8 +98,13 @@ export const router = createBrowserRouter([
                 ]
               },
               {
-                path: "settings/subscription",
-                element: <SettingsSubscriptionPage />
+                element: <PermissionGuard permissions={["subscriptions:read"]} />,
+                children: [
+                  {
+                    path: "settings/subscription",
+                    element: <SettingsSubscriptionPage />
+                  }
+                ]
               }
             ]
           }

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/features/auth/auth-provider";
 import { registerAgencySchema, type RegisterAgencyFormValues } from "@/features/auth/auth.schemas";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 export function RegisterAgencyPage() {
   const { registerAgency } = useAuth();
@@ -33,7 +34,7 @@ export function RegisterAgencyPage() {
     try {
       await registerAgency(values);
     } catch (error) {
-      toast.error("Création impossible", { description: "Vérifiez les informations puis réessayez." });
+      toast.error("Création impossible", { description: getApiErrorMessage(error) });
     }
   });
 

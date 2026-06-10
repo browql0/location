@@ -5,6 +5,8 @@ import { PageContainer } from "@/components/ui-custom/page-container";
 import { StatCard } from "@/components/ui-custom/stat-card";
 import { StatusBadge } from "@/components/ui-custom/status-badge";
 import { getCurrentSubscription, type Subscription } from "@/features/saas/saas-api";
+import { getApiErrorMessage } from "@/lib/api-error";
+import { toast } from "sonner";
 
 function daysRemaining(date: string) {
   return Math.max(0, Math.ceil((new Date(date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
@@ -14,7 +16,16 @@ export function SettingsSubscriptionPage() {
   const [subscription, setSubscription] = useState<Subscription | null>(null);
 
   useEffect(() => {
-    getCurrentSubscription().then(setSubscription).catch(() => setSubscription(null));
+    async function loadSubscription() {
+      try {
+        setSubscription(await getCurrentSubscription());
+      } catch (error) {
+        setSubscription(null);
+        toast.error("Chargement impossible", { description: getApiErrorMessage(error) });
+      }
+    }
+
+    void loadSubscription();
   }, []);
 
   return (

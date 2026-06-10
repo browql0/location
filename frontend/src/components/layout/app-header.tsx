@@ -9,6 +9,7 @@ import { ThemeToggle } from "./theme-toggle";
 const breadcrumbLabels: Record<string, string> = {
   dashboard: "Dashboard",
   "super-admin": "Super Admin",
+  agency: "Agence",
   agencies: "Agences",
   subscriptions: "Abonnements",
   plans: "Plans",
@@ -21,7 +22,8 @@ const breadcrumbLabels: Record<string, string> = {
   expenses: "Depenses",
   incidents: "Incidents",
   blacklist: "Blacklist",
-  settings: "Parametres"
+  settings: "Parametres",
+  profile: "Profil"
 };
 
 type AppHeaderProps = {
@@ -71,9 +73,11 @@ export function AppHeader({ onOpenSidebar, onToggleCollapse, sidebarCollapsed }:
           <Bell className="h-4 w-4" />
         </Button>
         <ThemeToggle />
-        <Button type="button" variant="ghost" className="hidden h-9 gap-2 px-2 sm:inline-flex" aria-label="Profil utilisateur">
-          <UserCircle className="h-4 w-4" />
-          <span className="max-w-28 truncate text-sm">{user?.firstName ?? "Profil"}</span>
+        <Button type="button" variant="ghost" className="hidden h-9 gap-2 px-2 sm:inline-flex" aria-label="Profil utilisateur" asChild>
+          <Link to="/profile">
+            <UserCircle className="h-4 w-4" />
+            <span className="max-w-28 truncate text-sm">{user?.firstName ?? "Profil"}</span>
+          </Link>
         </Button>
       </div>
     </header>

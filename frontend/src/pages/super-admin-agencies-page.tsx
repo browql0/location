@@ -8,6 +8,7 @@ import { DataTable } from "@/components/ui-custom/data-table";
 import { PageContainer } from "@/components/ui-custom/page-container";
 import { StatusBadge } from "@/components/ui-custom/status-badge";
 import { listAgencies, setAgencyEnabled, type Agency } from "@/features/saas/saas-api";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 export function SuperAdminAgenciesPage() {
   const [agencies, setAgencies] = useState<Agency[]>([]);
@@ -18,13 +19,15 @@ export function SuperAdminAgenciesPage() {
     setIsLoading(true);
     try {
       setAgencies(await listAgencies(status ? { status } : undefined));
+    } catch (error) {
+      toast.error("Chargement impossible", { description: getApiErrorMessage(error) });
     } finally {
       setIsLoading(false);
     }
   }
 
   useEffect(() => {
-    load();
+    void load();
   }, [status]);
 
   const columns = useMemo<ColumnDef<Agency>[]>(
@@ -44,9 +47,13 @@ export function SuperAdminAgenciesPage() {
             type="button"
             variant="outline"
             onClick={async () => {
-              await setAgencyEnabled(row.original.id, row.original.status !== "ACTIVE");
-              toast.success(row.original.status === "ACTIVE" ? "Agence suspendue" : "Agence reactivee");
-              await load();
+              try {
+                await setAgencyEnabled(row.original.id, row.original.status !== "ACTIVE");
+                toast.success(row.original.status === "ACTIVE" ? "Agence suspendue" : "Agence reactivee");
+                await load();
+              } catch (error) {
+                toast.error("Action impossible", { description: getApiErrorMessage(error) });
+              }
             }}
           >
             {row.original.status === "ACTIVE" ? "Suspendre" : "Reactiver"}

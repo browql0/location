@@ -8,6 +8,7 @@ import { DataTable } from "@/components/ui-custom/data-table";
 import { PageContainer } from "@/components/ui-custom/page-container";
 import { StatusBadge } from "@/components/ui-custom/status-badge";
 import { changeSubscriptionPlan, listPlans, listSubscriptions, setSubscriptionActive, type Subscription, type SubscriptionPlan } from "@/features/saas/saas-api";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 export function SuperAdminSubscriptionsPage() {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
@@ -15,13 +16,17 @@ export function SuperAdminSubscriptionsPage() {
   const [status, setStatus] = useState("");
 
   async function load() {
-    const [subscriptionData, planData] = await Promise.all([listSubscriptions(status ? { status } : undefined), listPlans()]);
-    setSubscriptions(subscriptionData);
-    setPlans(planData.filter((plan) => plan.isActive));
+    try {
+      const [subscriptionData, planData] = await Promise.all([listSubscriptions(status ? { status } : undefined), listPlans()]);
+      setSubscriptions(subscriptionData);
+      setPlans(planData.filter((plan) => plan.isActive));
+    } catch (error) {
+      toast.error("Chargement impossible", { description: getApiErrorMessage(error) });
+    }
   }
 
   useEffect(() => {
-    load();
+    void load();
   }, [status]);
 
   const columns = useMemo<ColumnDef<Subscription>[]>(
@@ -43,9 +48,13 @@ export function SuperAdminSubscriptionsPage() {
               defaultValue=""
               onChange={async (event) => {
                 if (!event.target.value) return;
-                await changeSubscriptionPlan(row.original.id, event.target.value);
-                toast.success("Plan change");
-                await load();
+                try {
+                  await changeSubscriptionPlan(row.original.id, event.target.value);
+                  toast.success("Plan change");
+                  await load();
+                } catch (error) {
+                  toast.error("Changement impossible", { description: getApiErrorMessage(error) });
+                }
               }}
             >
               <option value="">Changer plan</option>
@@ -59,9 +68,13 @@ export function SuperAdminSubscriptionsPage() {
               type="button"
               variant="outline"
               onClick={async () => {
-                await setSubscriptionActive(row.original.id, row.original.status === "SUSPENDED");
-                toast.success(row.original.status === "SUSPENDED" ? "Abonnement reactive" : "Abonnement suspendu");
-                await load();
+                try {
+                  await setSubscriptionActive(row.original.id, row.original.status === "SUSPENDED");
+                  toast.success(row.original.status === "SUSPENDED" ? "Abonnement reactive" : "Abonnement suspendu");
+                  await load();
+                } catch (error) {
+                  toast.error("Action impossible", { description: getApiErrorMessage(error) });
+                }
               }}
             >
               {row.original.status === "SUSPENDED" ? "Reactiver" : "Suspendre"}

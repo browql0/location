@@ -11,6 +11,8 @@ import { StatusBadge } from "@/components/ui-custom/status-badge";
 import { moduleEmptyStates } from "@/components/shared/module-empty-states";
 import { useAuth } from "@/features/auth/auth-provider";
 import { getDashboardKpis, type DashboardKpis } from "@/features/saas/saas-api";
+import { getApiErrorMessage } from "@/lib/api-error";
+import { toast } from "sonner";
 import { agencyPreviewData, type AgencyPreview } from "./dashboard-mock-data";
 import { RevenueChart } from "./revenue-chart";
 import { SubscriptionsChart } from "./subscriptions-chart";
@@ -45,7 +47,16 @@ export function SuperAdminDashboard() {
   const [kpis, setKpis] = useState<DashboardKpis | null>(null);
 
   useEffect(() => {
-    getDashboardKpis().then(setKpis).catch(() => setKpis(null));
+    async function loadKpis() {
+      try {
+        setKpis(await getDashboardKpis());
+      } catch (error) {
+        setKpis(null);
+        toast.error("Chargement des KPIs impossible", { description: getApiErrorMessage(error) });
+      }
+    }
+
+    void loadKpis();
   }, []);
 
   const revenue = `${(kpis?.revenueSaas ?? 0).toLocaleString("fr-MA")} MAD`;

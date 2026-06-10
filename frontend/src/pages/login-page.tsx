@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/features/auth/auth-provider";
 import { loginSchema, type LoginFormValues } from "@/features/auth/auth.schemas";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 export function LoginPage() {
   const { login } = useAuth();
@@ -24,7 +25,7 @@ export function LoginPage() {
     try {
       await login(values);
     } catch (error) {
-      toast.error("Connexion impossible", { description: "Email, mot de passe, agence ou abonnement invalide." });
+      toast.error("Connexion impossible", { description: getApiErrorMessage(error) });
     }
   });
 

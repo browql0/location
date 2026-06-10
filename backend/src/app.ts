@@ -13,6 +13,7 @@ import { agencyRouter } from "./modules/agencies/agency.routes.js";
 import { dashboardRouter } from "./modules/dashboard/dashboard.routes.js";
 import { subscriptionPlanRouter } from "./modules/subscription-plans/subscription-plan.routes.js";
 import { subscriptionRouter } from "./modules/subscriptions/subscription.routes.js";
+import { userRouter } from "./modules/users/user.routes.js";
 
 export const app = express();
 
@@ -32,6 +33,7 @@ app.use(`${env.API_PREFIX}/dashboard`, dashboardRouter);
 app.use(`${env.API_PREFIX}/subscription-plans`, subscriptionPlanRouter);
 app.use(`${env.API_PREFIX}/agencies`, agencyRouter);
 app.use(`${env.API_PREFIX}/subscriptions`, subscriptionRouter);
+app.use(`${env.API_PREFIX}/users`, userRouter);
 
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);

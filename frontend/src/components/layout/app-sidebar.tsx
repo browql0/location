@@ -3,7 +3,8 @@ import { LogOut, PanelLeftClose } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/features/auth/auth-provider";
 import { cn } from "@/lib/utils";
-import { brandIcon as BrandIcon, navigationGroups } from "./navigation";
+import type { Permission } from "@/types/auth";
+import { brandIcon as BrandIcon, getNavigationGroups } from "./navigation";
 
 type AppSidebarProps = {
   open?: boolean;
@@ -17,9 +18,16 @@ function roleLabel(role: string | undefined) {
   return role ?? "Utilisateur";
 }
 
+function canSeeItem(user: ReturnType<typeof useAuth>["user"], permission?: Permission) {
+  if (!permission) return true;
+  if (user?.role === "SUPER_ADMIN" || user?.role === "AGENCY_ADMIN") return true;
+  return Boolean(user?.permissions.includes(permission));
+}
+
 export function AppSidebar({ open = true, onClose, collapsed = false }: AppSidebarProps) {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const navigationGroups = getNavigationGroups(user?.role);
 
   return (
     <>
@@ -56,7 +64,7 @@ export function AppSidebar({ open = true, onClose, collapsed = false }: AppSideb
             <div key={group.label}>
               <div className={cn("px-2 text-[11px] font-medium uppercase tracking-normal text-muted-foreground", collapsed && "lg:sr-only")}>{group.label}</div>
               <div className="mt-2 space-y-1">
-                {group.items.map((item) => {
+                {group.items.filter((item) => canSeeItem(user, item.permission)).map((item) => {
                   const active = location.pathname === item.href;
                   const Icon = item.icon;
                   const content = (

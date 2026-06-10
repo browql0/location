@@ -4,9 +4,13 @@ export type AgencyStatus = "ACTIVE" | "INACTIVE" | "SUSPENDED";
 export type SubscriptionStatus = "TRIALING" | "ACTIVE" | "PAST_DUE" | "EXPIRED" | "CANCELLED" | "SUSPENDED";
 
 export type Permission =
+  | "users:read"
   | "users:create"
   | "users:update"
+  | "users:disable"
+  | "users:enable"
   | "users:delete"
+  | "users:permissions"
   | "agencies:read"
   | "agencies:update"
   | "subscriptions:read"
