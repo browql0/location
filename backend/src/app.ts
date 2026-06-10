@@ -8,6 +8,7 @@ import { env } from "./config/env.js";
 import { errorMiddleware } from "./middlewares/error.middleware.js";
 import { notFoundMiddleware } from "./middlewares/not-found.middleware.js";
 import { healthRouter } from "./modules/health/health.routes.js";
+import { authRouter } from "./modules/auth/auth.routes.js";
 
 export const app = express();
 
@@ -22,6 +23,7 @@ if (env.NODE_ENV !== "test") {
 }
 
 app.use(`${env.API_PREFIX}/health`, healthRouter);
+app.use(`${env.API_PREFIX}/auth`, authRouter);
 
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);
