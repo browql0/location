@@ -5,3 +5,7 @@ import * as service from "./dashboard.service.js";
 export const getSuperAdminDashboard: RequestHandler = asyncHandler(async (_req, res: Response) => {
   res.json({ data: await service.getSuperAdminDashboard() });
 });
+
+export const getAgencyDashboard: RequestHandler = asyncHandler(async (req, res: Response) => {
+  res.json({ data: await service.getAgencyDashboard(req.auth!) });
+});

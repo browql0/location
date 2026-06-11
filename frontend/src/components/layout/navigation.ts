@@ -41,7 +41,7 @@ const superAdminNavigationGroups: NavGroup[] = [
     label: "Operations",
     items: [
       { label: "Staff", href: "/staff", icon: ShieldCheck, permission: "users:read" },
-      { label: "Voitures", href: "/cars", icon: Car, permission: "cars:read", disabled: true },
+      { label: "Voitures", href: "/cars", icon: Car, permission: "cars:read" },
       { label: "Clients", href: "/clients", icon: Users, permission: "clients:read", disabled: true },
       { label: "Reservations", href: "/reservations", icon: CalendarClock, permission: "reservations:read", disabled: true }
     ]
@@ -68,7 +68,7 @@ const agencyNavigationGroups: NavGroup[] = [
     label: "Operations",
     items: [
       { label: "Staff", href: "/staff", icon: ShieldCheck, permission: "users:read" },
-      { label: "Voitures", href: "/cars", icon: Car, permission: "cars:read", disabled: true },
+      { label: "Voitures", href: "/cars", icon: Car, permission: "cars:read" },
       { label: "Clients", href: "/clients", icon: Users, permission: "clients:read", disabled: true },
       { label: "Reservations", href: "/reservations", icon: CalendarClock, permission: "reservations:read", disabled: true }
     ]

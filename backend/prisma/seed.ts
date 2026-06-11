@@ -11,7 +11,7 @@ const planSeed = [
     priceYearly: "0",
     trialDays: 30,
     maxUsers: 2,
-    maxCars: 5,
+    maxCars: 10,
     maxClients: 100,
     maxReservations: 100,
     canUseInvoices: true,

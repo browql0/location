@@ -35,7 +35,8 @@ export const PlanLimitService = {
 
   async assertCanCreateCar(agencyId: string) {
     const subscription = await getPlanWithCounts(agencyId);
-    assertBelowLimit(subscription.agency._count.cars, subscription.plan.maxCars, "PLAN_CAR_LIMIT_REACHED", "Car limit reached for current plan");
+    const activeCarCount = await prisma.car.count({ where: { agencyId, deletedAt: null } });
+    assertBelowLimit(activeCarCount, subscription.plan.maxCars, "PLAN_CAR_LIMIT_REACHED", "Car limit reached for current plan");
   },
 
   async assertCanCreateClient(agencyId: string) {

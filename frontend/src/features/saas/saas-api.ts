@@ -68,6 +68,13 @@ export type DashboardKpis = {
   revenueSaas: number;
 };
 
+export type AgencyDashboardKpis = {
+  vehicles: number;
+  available: number;
+  maintenance: number;
+  inactive: number;
+};
+
 export type SubscriptionPlanPayload = {
   name?: string;
   description?: string | null;
@@ -91,6 +98,11 @@ type ApiItem<T> = { data: T };
 
 export async function getDashboardKpis() {
   const response = await api.get<ApiItem<DashboardKpis>>("/dashboard/super-admin");
+  return response.data.data;
+}
+
+export async function getAgencyDashboardKpis() {
+  const response = await api.get<ApiItem<AgencyDashboardKpis>>("/dashboard/agency");
   return response.data.data;
 }
 

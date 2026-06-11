@@ -2,6 +2,9 @@ import { createBrowserRouter, Navigate, Outlet } from "react-router-dom";
 import { AppLayout } from "@/components/layout/app-layout";
 import { AuthProvider } from "@/features/auth/auth-provider";
 import { AgencyDashboardPage } from "@/pages/agency-dashboard-page";
+import { CarDetailPage } from "@/pages/car-detail-page";
+import { CarFormPage } from "@/pages/car-form-page";
+import { CarsPage } from "@/pages/cars-page";
 import { DashboardPage } from "@/pages/dashboard-page";
 import { LoginPage } from "@/pages/login-page";
 import { NotFoundPage } from "@/pages/not-found-page";
@@ -69,6 +72,33 @@ export const router = createBrowserRouter([
                   {
                     path: "staff",
                     element: <StaffPage />
+                  }
+                ]
+              },
+              {
+                element: <PermissionGuard permissions={["cars:read"]} />,
+                children: [
+                  {
+                    path: "cars",
+                    element: <CarsPage />
+                  }
+                ]
+              },
+              {
+                element: <PermissionGuard permissions={["cars:create"]} />,
+                children: [
+                  {
+                    path: "cars/new",
+                    element: <CarFormPage />
+                  }
+                ]
+              },
+              {
+                element: <PermissionGuard permissions={["cars:read"]} />,
+                children: [
+                  {
+                    path: "cars/:id",
+                    element: <CarDetailPage />
                   }
                 ]
               },

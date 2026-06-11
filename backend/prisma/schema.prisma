@@ -32,6 +32,25 @@ enum CarStatus {
   INACTIVE
 }
 
+enum FuelType {
+  GASOLINE
+  DIESEL
+  HYBRID
+  ELECTRIC
+}
+
+enum TransmissionType {
+  MANUAL
+  AUTOMATIC
+}
+
+enum DocumentType {
+  REGISTRATION
+  INSURANCE
+  TECHNICAL_VISIT
+  OTHER
+}
+
 enum ReservationStatus {
   CONFIRMED
   IN_PROGRESS
@@ -329,21 +348,29 @@ model RefreshToken {
 }
 
 model Car {
-  id                  String    @id @default(cuid())
-  agencyId            String
-  agency              Agency    @relation(fields: [agencyId], references: [id])
-  brand               String
-  model               String
-  year                Int
-  licensePlate        String
-  dailyPrice          Decimal   @db.Decimal(10, 2)
-  mileage             Int       @default(0)
-  status              CarStatus @default(AVAILABLE)
-  insuranceExpiryDate DateTime?
-  technicalVisitDate  DateTime?
-  description         String?
+  id                       String           @id @default(cuid())
+  agencyId                 String
+  agency                   Agency           @relation(fields: [agencyId], references: [id])
+  brand                    String
+  model                    String
+  year                     Int
+  registrationNumber       String
+  vin                      String?          @unique
+  color                    String?
+  fuelType                 FuelType         @default(GASOLINE)
+  transmission             TransmissionType @default(MANUAL)
+  seats                    Int              @default(5)
+  dailyPrice               Decimal          @db.Decimal(10, 2)
+  weeklyPrice              Decimal          @default(0) @db.Decimal(10, 2)
+  monthlyPrice             Decimal          @default(0) @db.Decimal(10, 2)
+  mileage                  Int              @default(0)
+  status                   CarStatus        @default(AVAILABLE)
+  insuranceExpiryDate      DateTime?
+  technicalVisitExpiryDate DateTime?
+  notes                    String?
 
   photos             CarPhoto[]
+  documents          CarDocument[]
   reservations       Reservation[]
   expenses           Expense[]
   maintenanceRecords MaintenanceRecord[]
@@ -353,23 +380,37 @@ model Car {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  @@unique([agencyId, licensePlate])
+  @@unique([agencyId, registrationNumber])
   @@index([agencyId])
   @@index([status])
-  @@index([insuranceExpiryDate])
-  @@index([technicalVisitDate])
+  @@index([registrationNumber])
+  @@index([createdAt])
 }
 
 model CarPhoto {
-  id        String @id @default(cuid())
+  id        String  @id @default(cuid())
   carId     String
-  car       Car    @relation(fields: [carId], references: [id])
+  car       Car     @relation(fields: [carId], references: [id])
   url       String
-  sortOrder Int    @default(0)
+  isPrimary Boolean @default(false)
 
   createdAt DateTime @default(now())
 
   @@index([carId])
+}
+
+model CarDocument {
+  id       String       @id @default(cuid())
+  carId    String
+  car      Car          @relation(fields: [carId], references: [id])
+  type     DocumentType
+  fileName String
+  fileUrl  String
+
+  createdAt DateTime @default(now())
+
+  @@index([carId])
+  @@index([type])
 }
 
 model Client {
