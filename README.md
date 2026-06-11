@@ -92,7 +92,7 @@ STAFF
 | **Phase 2** | Authentification & Multi-Tenant (JWT, guards, middlewares) | ✅ Terminé |
 | **Phase 3** | Agences & Abonnements SaaS | ✅ Terminé |
 | **Phase 4** | Gestion Staff & Audit Logs | Gestion staff ✅ Terminé |
-| **Phase 5** | Gestion Véhicules (CRUD, états, documents, alertes) | 🔄 À faire |
+| **Phase 5** | Gestion Véhicules (CRUD, états, documents, alertes) | ✅ Terminé |
 | **Phase 6** | Gestion Clients (fiche, documents CIN/permis) | 🔄 À faire |
 | **Phase 7** | Réservations (calendrier, disponibilité, anti-chevauchement) | 🔄 À faire |
 | **Phase 8** | Paiements & Cautions | 🔄 À faire |
