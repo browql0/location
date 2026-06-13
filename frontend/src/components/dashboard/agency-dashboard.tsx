@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Car, CheckCircle2, PauseCircle, Wrench } from "lucide-react";
+import { AlertTriangle, Car, CheckCircle2, PauseCircle, Users, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { AppPageHeader } from "@/components/ui-custom/app-page-header";
 import { AppSection } from "@/components/ui-custom/app-section";
@@ -31,11 +31,12 @@ export function AgencyDashboard() {
       <AppPageHeader
         eyebrow={user?.role === "STAFF" ? "Staff" : "Agence"}
         title="Dashboard agence"
-        description={`Vue operationnelle de ${user?.agency?.name ?? "votre agence"}. Donnees flotte issues de PostgreSQL.`}
+        description={`Vue operationnelle de ${user?.agency?.name ?? "votre agence"}. Donnees flotte et clients issues de PostgreSQL.`}
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <StatCard description="Vehicules actifs en flotte" icon={Car} title="Vehicules" value={String(kpis?.vehicles ?? "-")} />
+        <StatCard description="Clients actifs en base" icon={Users} title="Clients" value={String(kpis?.clients ?? "-")} />
         <StatCard description="Prets a louer" icon={CheckCircle2} title="Disponibles" value={String(kpis?.available ?? "-")} />
         <StatCard description="En intervention" icon={Wrench} title="Maintenance" value={String(kpis?.maintenance ?? "-")} />
         <StatCard description="Hors service" icon={PauseCircle} title="Inactifs" value={String(kpis?.inactive ?? "-")} />
@@ -45,7 +46,7 @@ export function AgencyDashboard() {
         <EmptyState
           icon={AlertTriangle}
           title="Historique futur"
-          description="Les clients, reservations, contrats, factures et paiements resteront vides jusqu'aux prochaines phases."
+          description="Les reservations, contrats, factures et paiements resteront vides jusqu'aux prochaines phases."
         />
       </AppSection>
     </PageContainer>

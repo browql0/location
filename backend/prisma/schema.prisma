@@ -388,15 +388,21 @@ model Car {
 }
 
 model CarPhoto {
-  id        String  @id @default(cuid())
-  carId     String
-  car       Car     @relation(fields: [carId], references: [id])
-  url       String
-  isPrimary Boolean @default(false)
+  id         String  @id @default(cuid())
+  carId      String
+  car        Car     @relation(fields: [carId], references: [id])
+  url        String
+  fileName   String?
+  mimeType   String?
+  size       Int?
+  storageKey String?
+  source     String  @default("MANUAL")
+  isPrimary  Boolean @default(false)
 
   createdAt DateTime @default(now())
 
   @@index([carId])
+  @@index([storageKey])
 }
 
 model CarDocument {
@@ -424,6 +430,11 @@ model Client {
   cinOrPassport      String?
   drivingLicense     String?
   address            String?
+  city               String?
+  country            String?
+  dateOfBirth        DateTime?
+  nationality        String?
+  notes              String?
   normalizedIdentity String?
 
   documents    ClientDocument[]
@@ -438,21 +449,26 @@ model Client {
   @@index([phone])
   @@index([email])
   @@index([cinOrPassport])
+  @@index([drivingLicense])
   @@index([normalizedIdentity])
 }
 
 model ClientDocument {
-  id       String             @id @default(cuid())
-  clientId String
-  client   Client             @relation(fields: [clientId], references: [id])
-  fileId   String
-  file     File               @relation(fields: [fileId], references: [id])
-  type     ClientDocumentType
+  id         String             @id @default(cuid())
+  clientId   String
+  client     Client             @relation(fields: [clientId], references: [id])
+  type       ClientDocumentType
+  fileName   String
+  mimeType   String
+  size       Int
+  storageKey String
+  fileUrl    String?
 
   createdAt DateTime @default(now())
 
   @@index([clientId])
   @@index([type])
+  @@index([storageKey])
 }
 
 model ClientRiskProfile {
@@ -788,7 +804,6 @@ model File {
   url        String
   storageKey String
 
-  clientDocuments       ClientDocument[]
   incidentEvidences     IncidentEvidence[]
   expenseAttachments    Expense[]          @relation("ExpenseAttachments")
   maintenanceAttachments MaintenanceRecord[] @relation("MaintenanceAttachments")

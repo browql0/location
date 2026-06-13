@@ -9,6 +9,11 @@ export type CarPhoto = {
   id: string;
   carId: string;
   url: string;
+  fileName: string | null;
+  mimeType: string | null;
+  size: number | null;
+  storageKey: string | null;
+  source: string;
   isPrimary: boolean;
   createdAt: string;
 };
@@ -74,6 +79,14 @@ export type CarPayload = {
 type ApiList<T> = { data: T[] };
 type ApiItem<T> = { data: T };
 
+function unwrapList<T>(payload: T[] | ApiList<T>) {
+  return Array.isArray(payload) ? payload : payload.data;
+}
+
+function unwrapItem<T>(payload: T | ApiItem<T>) {
+  return "data" in (payload as ApiItem<T>) ? (payload as ApiItem<T>).data : (payload as T);
+}
+
 export async function listCars(params?: { agencyId?: string; search?: string; status?: string }) {
   const response = await api.get<ApiList<Car>>("/cars", { params });
   return response.data.data;
@@ -105,18 +118,33 @@ export async function setCarStatus(id: string, status: Exclude<CarStatus, "RENTE
 }
 
 export async function listCarPhotos(carId: string) {
-  const response = await api.get<ApiList<CarPhoto>>(`/cars/${carId}/photos`);
-  return response.data.data;
+  const response = await api.get<ApiList<CarPhoto> | CarPhoto[]>(`/cars/${carId}/photos`);
+  return unwrapList<CarPhoto>(response.data);
 }
 
-export async function addCarPhoto(carId: string, input: { url: string; isPrimary: boolean }) {
-  const response = await api.post<ApiItem<CarPhoto>>(`/cars/${carId}/photos`, input);
-  return response.data.data;
+export async function uploadCarPhoto(carId: string, file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await api.post<ApiItem<CarPhoto>>(`/cars/${carId}/photos`, formData, {
+    headers: { "Content-Type": "multipart/form-data" }
+  });
+  return unwrapItem<CarPhoto>(response.data);
 }
 
 export async function deleteCarPhoto(id: string) {
   const response = await api.delete<ApiItem<CarPhoto>>(`/cars/photos/${id}`);
-  return response.data.data;
+  return unwrapItem<CarPhoto>(response.data);
+}
+
+export async function setPrimaryCarPhoto(id: string) {
+  const response = await api.patch<ApiItem<CarPhoto>>(`/cars/photos/${id}/primary`);
+  return unwrapItem<CarPhoto>(response.data);
+}
+
+export async function getCarPhotoObjectUrl(photo: CarPhoto) {
+  if (!photo.storageKey && photo.url) return photo.url;
+  const response = await api.get<Blob>(`/cars/photos/${photo.id}/download`, { responseType: "blob" });
+  return URL.createObjectURL(response.data);
 }
 
 export async function listCarDocuments(carId: string) {

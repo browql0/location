@@ -10,6 +10,7 @@ import { notFoundMiddleware } from "./middlewares/not-found.middleware.js";
 import { healthRouter } from "./modules/health/health.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { carRouter } from "./modules/cars/car.routes.js";
+import { clientRouter } from "./modules/clients/client.routes.js";
 import { agencyRouter } from "./modules/agencies/agency.routes.js";
 import { dashboardRouter } from "./modules/dashboard/dashboard.routes.js";
 import { subscriptionPlanRouter } from "./modules/subscription-plans/subscription-plan.routes.js";
@@ -36,6 +37,7 @@ app.use(`${env.API_PREFIX}/agencies`, agencyRouter);
 app.use(`${env.API_PREFIX}/subscriptions`, subscriptionRouter);
 app.use(`${env.API_PREFIX}/users`, userRouter);
 app.use(`${env.API_PREFIX}/cars`, carRouter);
+app.use(`${env.API_PREFIX}/clients`, clientRouter);
 
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);

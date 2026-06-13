@@ -13,7 +13,7 @@ import { PageContainer } from "@/components/ui-custom/page-container";
 import { TableSkeleton } from "@/components/ui-custom/page-skeleton";
 import { StatusBadge } from "@/components/ui-custom/status-badge";
 import { useAuth } from "@/features/auth/auth-provider";
-import { deleteCar, listCars, setCarStatus, type Car, type CarStatus } from "@/features/cars/cars-api";
+import { deleteCar, getCarPhotoObjectUrl, listCars, setCarStatus, type Car, type CarStatus } from "@/features/cars/cars-api";
 import { getApiErrorMessage } from "@/lib/api-error";
 import type { AuthUser, Permission } from "@/types/auth";
 
@@ -37,6 +37,7 @@ export function CarsPage() {
   const navigate = useNavigate();
   const [cars, setCars] = useState<Car[]>([]);
   const [statusFilter, setStatusFilter] = useState("");
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [confirmTarget, setConfirmTarget] = useState<Car | null>(null);
   const canCreate = hasPermission(user, "cars:create");
@@ -58,6 +59,32 @@ export function CarsPage() {
     void load();
   }, [statusFilter]);
 
+  useEffect(() => {
+    const ownedUrls: string[] = [];
+    let cancelled = false;
+    async function loadPrimaryPhotos() {
+      const entries = await Promise.all(
+        cars.map(async (car) => {
+          const photo = car.photos.find((item) => item.isPrimary) ?? car.photos[0];
+          if (!photo) return [car.id, placeholder] as const;
+          try {
+            const url = await getCarPhotoObjectUrl(photo);
+            if (photo.storageKey) ownedUrls.push(url);
+            return [car.id, url] as const;
+          } catch {
+            return [car.id, placeholder] as const;
+          }
+        })
+      );
+      if (!cancelled) setPhotoUrls(Object.fromEntries(entries));
+    }
+    void loadPrimaryPhotos();
+    return () => {
+      cancelled = true;
+      ownedUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [cars]);
+
   async function changeStatus(car: Car, status: Exclude<CarStatus, "RENTED">) {
     try {
       await setCarStatus(car.id, status);
@@ -72,7 +99,7 @@ export function CarsPage() {
     () => [
       {
         header: "Photo",
-        cell: ({ row }) => <img alt="" className="h-12 w-16 rounded-md object-cover ring-1 ring-border" src={row.original.photos[0]?.url ?? placeholder} />
+        cell: ({ row }) => <img alt="" className="h-12 w-16 rounded-md object-cover ring-1 ring-border" src={photoUrls[row.original.id] ?? placeholder} />
       },
       { accessorKey: "registrationNumber", header: "Immatriculation", cell: ({ row }) => <span className="font-medium">{row.original.registrationNumber}</span> },
       { accessorKey: "brand", header: "Marque" },
@@ -109,7 +136,7 @@ export function CarsPage() {
         )
       }
     ],
-    [canDelete, canUpdate, navigate]
+    [canDelete, canUpdate, navigate, photoUrls]
   );
 
   return (

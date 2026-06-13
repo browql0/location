@@ -4,8 +4,9 @@ import { AppError } from "../../shared/errors/app-error.js";
 import type { AuthContext } from "../../shared/types/auth.js";
 import type { Permission } from "../../shared/utils/permissions.js";
 import { createAuditLog } from "../audit/audit.service.js";
+import { FileStorageService } from "../files/file-storage.service.js";
 import { PlanLimitService } from "../subscriptions/plan-limit.service.js";
-import type { CarQueryInput, CreateCarDocumentInput, CreateCarInput, CreateCarPhotoInput, UpdateCarInput } from "./car.schemas.js";
+import type { CarQueryInput, CreateCarDocumentInput, CreateCarInput, UpdateCarInput } from "./car.schemas.js";
 
 type RequestMeta = {
   ipAddress?: string;
@@ -46,6 +47,14 @@ async function getScopedCar(id: string, auth: AuthContext) {
   });
   if (!car) throw new AppError("Car not found", 404, "CAR_NOT_FOUND");
   return car;
+}
+
+async function getScopedPhoto(photoId: string, auth: AuthContext) {
+  const photo = await prisma.carPhoto.findUnique({ where: { id: photoId }, include: { car: true } });
+  if (!photo || photo.car.deletedAt) throw new AppError("Car photo not found", 404, "CAR_PHOTO_NOT_FOUND");
+  const agencyId = agencyScope(auth);
+  if (agencyId && photo.car.agencyId !== agencyId) throw new AppError("Car photo not found", 404, "CAR_PHOTO_NOT_FOUND");
+  return photo;
 }
 
 async function assertUniqueCar(input: { agencyId: string; registrationNumber?: string; vin?: string | null }, currentCarId?: string) {
@@ -234,19 +243,63 @@ export async function listPhotos(carId: string, auth: AuthContext) {
   return prisma.carPhoto.findMany({ where: { carId }, orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] });
 }
 
-export async function addPhoto(carId: string, input: CreateCarPhotoInput, auth: AuthContext) {
+export async function addPhoto(carId: string, file: Express.Multer.File | undefined, auth: AuthContext, meta: RequestMeta) {
   assertPermission(auth, "cars:update");
-  await getScopedCar(carId, auth);
-  if (input.isPrimary) await prisma.carPhoto.updateMany({ where: { carId }, data: { isPrimary: false } });
-  return prisma.carPhoto.create({ data: { carId, url: input.url, isPrimary: input.isPrimary } });
+  const car = await getScopedCar(carId, auth);
+  if (!file) throw new AppError("File is required", 400, "CAR_PHOTO_FILE_REQUIRED");
+  const shouldBePrimary = car.photos.length === 0;
+  const saved = await FileStorageService.saveFile(file, { agencyId: car.agencyId, carId });
+  if (shouldBePrimary) await prisma.carPhoto.updateMany({ where: { carId }, data: { isPrimary: false } });
+  const photo = await prisma.carPhoto.create({
+    data: {
+      carId,
+      url: saved.fileUrl ?? "",
+      fileName: file.originalname,
+      mimeType: file.mimetype,
+      size: file.size,
+      storageKey: saved.storageKey,
+      source: "UPLOAD",
+      isPrimary: shouldBePrimary
+    }
+  });
+  await createAuditLog({
+    action: AuditAction.CREATE,
+    entity: "CarPhoto",
+    entityId: photo.id,
+    userId: auth.userId,
+    agencyId: car.agencyId,
+    metadata: { event: "car_photo_added", carId, registrationNumber: car.registrationNumber },
+    ...meta
+  });
+  return photo;
 }
 
 export async function deletePhoto(id: string, auth: AuthContext) {
   assertPermission(auth, "cars:update");
-  const photo = await prisma.carPhoto.findUnique({ where: { id }, include: { car: true } });
-  if (!photo || photo.car.deletedAt) throw new AppError("Car photo not found", 404, "CAR_PHOTO_NOT_FOUND");
-  await getScopedCar(photo.carId, auth);
-  return prisma.carPhoto.delete({ where: { id } });
+  const photo = await getScopedPhoto(id, auth);
+  const deleted = await prisma.carPhoto.delete({ where: { id } });
+  if (photo.storageKey) {
+    try {
+      await FileStorageService.deleteFile(photo.storageKey);
+    } catch (error) {
+      console.warn("Car photo file deletion failed:", error);
+    }
+  }
+  return deleted;
+}
+
+export async function setPrimaryPhoto(id: string, auth: AuthContext) {
+  assertPermission(auth, "cars:update");
+  const photo = await getScopedPhoto(id, auth);
+  await prisma.carPhoto.updateMany({ where: { carId: photo.carId }, data: { isPrimary: false } });
+  return prisma.carPhoto.update({ where: { id }, data: { isPrimary: true } });
+}
+
+export async function getPhotoDownload(id: string, auth: AuthContext) {
+  assertPermission(auth, "cars:read");
+  const photo = await getScopedPhoto(id, auth);
+  if (!photo.storageKey) return { photo, stream: null };
+  return { photo, stream: await FileStorageService.getFileStream(photo.storageKey) };
 }
 
 export async function listDocuments(carId: string, auth: AuthContext) {

@@ -28,12 +28,13 @@ export async function getAgencyDashboard(auth: AuthContext) {
   const agencyId = auth.role === UserRole.SUPER_ADMIN ? null : auth.agencyId;
   if (!agencyId) throw new AppError("Agency context is required", 403, "AGENCY_REQUIRED");
 
-  const [vehicles, available, maintenance, inactive] = await Promise.all([
+  const [vehicles, available, maintenance, inactive, clients] = await Promise.all([
     prisma.car.count({ where: { agencyId, deletedAt: null } }),
     prisma.car.count({ where: { agencyId, deletedAt: null, status: CarStatus.AVAILABLE } }),
     prisma.car.count({ where: { agencyId, deletedAt: null, status: CarStatus.MAINTENANCE } }),
-    prisma.car.count({ where: { agencyId, deletedAt: null, status: CarStatus.INACTIVE } })
+    prisma.car.count({ where: { agencyId, deletedAt: null, status: CarStatus.INACTIVE } }),
+    prisma.client.count({ where: { agencyId, deletedAt: null } })
   ]);
 
-  return { vehicles, available, maintenance, inactive };
+  return { vehicles, available, maintenance, inactive, clients };
 }

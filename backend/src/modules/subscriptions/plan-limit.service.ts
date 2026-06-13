@@ -41,7 +41,8 @@ export const PlanLimitService = {
 
   async assertCanCreateClient(agencyId: string) {
     const subscription = await getPlanWithCounts(agencyId);
-    assertBelowLimit(subscription.agency._count.clients, subscription.plan.maxClients, "PLAN_CLIENT_LIMIT_REACHED", "Client limit reached for current plan");
+    const activeClientCount = await prisma.client.count({ where: { agencyId, deletedAt: null } });
+    assertBelowLimit(activeClientCount, subscription.plan.maxClients, "PLAN_CLIENT_LIMIT_REACHED", "Client limit reached for current plan");
   },
 
   async assertCanCreateReservation(agencyId: string) {

@@ -45,11 +45,26 @@ export const listPhotos: RequestHandler = asyncHandler(async (req: Request, res:
 });
 
 export const addPhoto: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
-  res.status(201).json({ data: await service.addPhoto(String(req.params.id), req.body, req.auth!) });
+  res.status(201).json({ data: await service.addPhoto(String(req.params.id), req.file, req.auth!, requestMeta(req)) });
 });
 
 export const deletePhoto: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
-  res.json({ data: await service.deletePhoto(String(req.params.id), req.auth!) });
+  res.json({ data: await service.deletePhoto(String(req.params.photoId), req.auth!) });
+});
+
+export const setPrimaryPhoto: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  res.json({ data: await service.setPrimaryPhoto(String(req.params.photoId), req.auth!) });
+});
+
+export const downloadPhoto: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const { photo, stream } = await service.getPhotoDownload(String(req.params.photoId), req.auth!);
+  if (!stream) {
+    res.redirect(photo.url);
+    return;
+  }
+  res.setHeader("Content-Type", photo.mimeType ?? "application/octet-stream");
+  res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(photo.fileName ?? "car-photo")}"`);
+  stream.pipe(res);
 });
 
 export const listDocuments: RequestHandler = asyncHandler(async (req: Request, res: Response) => {

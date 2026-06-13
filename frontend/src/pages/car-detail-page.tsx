@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import axios from "axios";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { FileText, Image, Wrench } from "lucide-react";
+import { FileText, Image, Star, Trash2, Upload, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,12 +14,16 @@ import { StatusBadge } from "@/components/ui-custom/status-badge";
 import { useAuth } from "@/features/auth/auth-provider";
 import {
   addCarDocument,
-  addCarPhoto,
   deleteCarDocument,
   deleteCarPhoto,
+  getCarPhotoObjectUrl,
   getCar,
+  listCarPhotos,
   setCarStatus,
+  setPrimaryCarPhoto,
+  uploadCarPhoto,
   type Car,
+  type CarPhoto,
   type DocumentType
 } from "@/features/cars/cars-api";
 import { getApiErrorMessage } from "@/lib/api-error";
@@ -41,8 +46,13 @@ export function CarDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
   const [car, setCar] = useState<Car | null>(null);
+  const [photos, setPhotos] = useState<CarPhoto[]>([]);
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
-  const [photoUrl, setPhotoUrl] = useState("https://placehold.co/800x500?text=Voiture");
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
   const [documentForm, setDocumentForm] = useState<{ type: DocumentType; fileName: string; fileUrl: string }>({
     type: "REGISTRATION",
     fileName: "",
@@ -54,7 +64,9 @@ export function CarDetailPage() {
     if (!id) return;
     try {
       setIsLoading(true);
-      setCar(await getCar(id));
+      const nextCar = await getCar(id);
+      setCar(nextCar);
+      setPhotos(nextCar.photos);
     } catch (error) {
       toast.error("Chargement impossible", { description: getApiErrorMessage(error) });
     } finally {
@@ -65,6 +77,60 @@ export function CarDetailPage() {
   useEffect(() => {
     void load();
   }, [id]);
+
+  useEffect(() => {
+    const ownedUrls: string[] = [];
+    let cancelled = false;
+    async function loadPhotoUrls() {
+      const entries = await Promise.all(
+        photos.map(async (photo) => {
+          try {
+            const url = await getCarPhotoObjectUrl(photo);
+            if (photo.storageKey) ownedUrls.push(url);
+            return [photo.id, url] as const;
+          } catch (error) {
+            console.error("Load car photo error:", axios.isAxiosError(error) ? error.response?.data || error : error);
+            return [photo.id, "https://placehold.co/800x500?text=Voiture"] as const;
+          }
+        })
+      );
+      if (!cancelled) setPhotoUrls(Object.fromEntries(entries));
+    }
+    void loadPhotoUrls();
+    return () => {
+      cancelled = true;
+      ownedUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [photos]);
+
+  useEffect(() => {
+    if (!photoFile) {
+      setPhotoPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(photoFile);
+    setPhotoPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [photoFile]);
+
+  async function reloadPhotos(options: { silent?: boolean } = {}) {
+    if (!id) return;
+    try {
+      setPhotos(await listCarPhotos(id));
+    } catch (error) {
+      console.error("Load car photos error:", axios.isAxiosError(error) ? error.response?.data || error : error);
+      if (!options.silent) toast.error("Chargement photos impossible", { description: getApiErrorMessage(error) });
+    }
+  }
+
+  function photoUploadError(error: unknown) {
+    if (axios.isAxiosError(error)) {
+      const code = error.response?.data?.code;
+      if (code === "CAR_PHOTO_UNSUPPORTED_FORMAT") return "Format non autorise";
+      if (code === "FILE_TOO_LARGE" || code === "CLIENT_DOCUMENT_FILE_TOO_LARGE") return "Taille max 5 MB depassee";
+    }
+    return getApiErrorMessage(error);
+  }
 
   if (isLoading) {
     return (
@@ -124,33 +190,68 @@ export function CarDetailPage() {
       </div>
 
       <AppSection className="rounded-lg border bg-card p-5" title="Photos">
+        {photos[0] ? (
+          <img alt="" className="aspect-[16/7] w-full rounded-md object-cover ring-1 ring-border" src={photoUrls[photos[0].id] ?? "https://placehold.co/1200x520?text=Voiture"} />
+        ) : null}
         {canUpdate ? (
           <form
-            className="mb-4 flex flex-col gap-2 sm:flex-row"
+            className="grid gap-3 md:grid-cols-[1fr_auto]"
             onSubmit={async (event) => {
               event.preventDefault();
+              if (!photoFile) return;
+              setIsUploadingPhoto(true);
               try {
-                await addCarPhoto(car.id, { url: photoUrl, isPrimary: car.photos.length === 0 });
-                setPhotoUrl("https://placehold.co/800x500?text=Voiture");
-                await load();
+                const uploaded = await uploadCarPhoto(car.id, photoFile);
+                toast.success("Upload reussi");
+                setPhotos((current) => [uploaded, ...current.filter((photo) => photo.id !== uploaded.id)]);
+                setPhotoFile(null);
+                if (photoInputRef.current) photoInputRef.current.value = "";
+                void reloadPhotos({ silent: true });
               } catch (error) {
-                toast.error("Ajout photo impossible", { description: getApiErrorMessage(error) });
+                console.error("Upload car photo error:", axios.isAxiosError(error) ? error.response?.data || error : error);
+                toast.error(photoUploadError(error));
+              } finally {
+                setIsUploadingPhoto(false);
               }
             }}
           >
-            <Input value={photoUrl} onChange={(event) => setPhotoUrl(event.target.value)} />
-            <Button type="submit"><Image className="mr-2 h-4 w-4" /> Ajouter</Button>
+            <div className="grid gap-2">
+              <input
+                ref={photoInputRef}
+                required
+                accept="image/png,image/jpeg,image/jpg,image/webp"
+                className="h-10 rounded-md border bg-background px-3 py-2 text-sm"
+                type="file"
+                onChange={(event) => setPhotoFile(event.target.files?.[0] ?? null)}
+              />
+              {photoPreview ? <img alt="" className="h-32 w-48 rounded-md object-cover ring-1 ring-border" src={photoPreview} /> : null}
+            </div>
+            <Button disabled={isUploadingPhoto} type="submit"><Upload className="mr-2 h-4 w-4" /> Ajouter photo</Button>
           </form>
         ) : null}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {car.photos.map((photo) => (
+          {photos.map((photo) => (
             <div className="rounded-lg border p-2" key={photo.id}>
-              <img alt="" className="aspect-video w-full rounded-md object-cover" src={photo.url} />
-              {canUpdate ? <Button className="mt-2 w-full" type="button" variant="outline" onClick={async () => { await deleteCarPhoto(photo.id); await load(); }}>Supprimer</Button> : null}
+              <img alt="" className="aspect-video w-full rounded-md object-cover" src={photoUrls[photo.id] ?? "https://placehold.co/800x500?text=Voiture"} />
+              <div className="mt-2 flex flex-col gap-2">
+                {photo.isPrimary ? <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">Principale</span> : null}
+                {canUpdate ? (
+                  <>
+                    {!photo.isPrimary ? (
+                      <Button type="button" variant="outline" onClick={async () => { await setPrimaryCarPhoto(photo.id); await reloadPhotos(); }}>
+                        <Star className="mr-2 h-4 w-4" /> Definir principale
+                      </Button>
+                    ) : null}
+                    <Button type="button" variant="outline" onClick={async () => { if (!window.confirm("Supprimer cette photo ?")) return; await deleteCarPhoto(photo.id); toast.success("Photo supprimee"); await reloadPhotos(); }}>
+                      <Trash2 className="mr-2 h-4 w-4" /> Supprimer
+                    </Button>
+                  </>
+                ) : null}
+              </div>
             </div>
           ))}
         </div>
-        {car.photos.length === 0 ? <EmptyState title="Aucune photo" description="Les URLs de photos seront remplacees plus tard par l'upload R2/S3." /> : null}
+        {photos.length === 0 ? <EmptyState icon={Image} title="Aucune photo" description="Les photos ajoutees apparaitront ici." /> : null}
       </AppSection>
 
       <AppSection className="rounded-lg border bg-card p-5" title="Documents">

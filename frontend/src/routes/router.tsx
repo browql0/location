@@ -2,6 +2,9 @@ import { createBrowserRouter, Navigate, Outlet } from "react-router-dom";
 import { AppLayout } from "@/components/layout/app-layout";
 import { AuthProvider } from "@/features/auth/auth-provider";
 import { AgencyDashboardPage } from "@/pages/agency-dashboard-page";
+import { ClientDetailPage } from "@/pages/client-detail-page";
+import { ClientFormPage } from "@/pages/client-form-page";
+import { ClientsPage } from "@/pages/clients-page";
 import { CarDetailPage } from "@/pages/car-detail-page";
 import { CarFormPage } from "@/pages/car-form-page";
 import { CarsPage } from "@/pages/cars-page";
@@ -99,6 +102,42 @@ export const router = createBrowserRouter([
                   {
                     path: "cars/:id",
                     element: <CarDetailPage />
+                  }
+                ]
+              },
+              {
+                element: <PermissionGuard permissions={["clients:read"]} />,
+                children: [
+                  {
+                    path: "clients",
+                    element: <ClientsPage />
+                  }
+                ]
+              },
+              {
+                element: <PermissionGuard permissions={["clients:create"]} />,
+                children: [
+                  {
+                    path: "clients/new",
+                    element: <ClientFormPage />
+                  }
+                ]
+              },
+              {
+                element: <PermissionGuard permissions={["clients:read"]} />,
+                children: [
+                  {
+                    path: "clients/:id",
+                    element: <ClientDetailPage />
+                  }
+                ]
+              },
+              {
+                element: <PermissionGuard permissions={["clients:update"]} />,
+                children: [
+                  {
+                    path: "clients/:id/edit",
+                    element: <ClientFormPage />
                   }
                 ]
               },

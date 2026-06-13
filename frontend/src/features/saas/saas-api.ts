@@ -73,6 +73,7 @@ export type AgencyDashboardKpis = {
   available: number;
   maintenance: number;
   inactive: number;
+  clients: number;
 };
 
 export type SubscriptionPlanPayload = {
