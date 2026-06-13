@@ -50,8 +50,8 @@ export function AppSidebar({ open = true, onClose, collapsed = false }: AppSideb
               <BrandIcon className="h-5 w-5" />
             </div>
             <div className={cn("min-w-0", collapsed && "lg:hidden")}>
-              <div className="truncate text-sm font-semibold">Voiture SaaS</div>
-              <div className="truncate text-xs text-muted-foreground">{user?.agency?.name ?? "Administration globale"}</div>
+              <div className="truncate text-sm font-semibold">RENTORA</div>
+              <div className="truncate text-xs text-muted-foreground">{user?.agency?.name ?? "Rentora Platform"}</div>
             </div>
           </div>
           <Button type="button" variant="ghost" size="icon" className="lg:hidden" aria-label="Fermer la navigation" onClick={onClose}>

@@ -54,7 +54,7 @@ export function AppHeader({ onOpenSidebar, onToggleCollapse, sidebarCollapsed }:
 
       <nav aria-label="Fil d'Ariane" className="hidden min-w-0 flex-1 items-center text-sm text-muted-foreground md:flex">
         <Link className="rounded-sm hover:text-foreground" to="/dashboard">
-          Voiture SaaS
+          RENTORA
         </Link>
         {currentSegments.map((segment, index) => (
           <span className="flex min-w-0 items-center" key={`${segment}-${index}`}>

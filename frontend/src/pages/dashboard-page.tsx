@@ -8,5 +8,9 @@ export function DashboardPage() {
     return <Navigate to="/super-admin/dashboard" replace />;
   }
 
+  if (user?.role === "STAFF") {
+    return <Navigate to="/staff/dashboard" replace />;
+  }
+
   return <Navigate to="/agency/dashboard" replace />;
 }

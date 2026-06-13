@@ -29,28 +29,12 @@ export type NavGroup = {
 
 const superAdminNavigationGroups: NavGroup[] = [
   {
-    label: "Administration globale",
+    label: "SaaS",
     items: [
       { label: "Dashboard", href: "/super-admin/dashboard", icon: Gauge },
       { label: "Agences", href: "/super-admin/agencies", icon: Building2 },
       { label: "Abonnements", href: "/super-admin/subscriptions", icon: CreditCard },
       { label: "Plans", href: "/super-admin/plans", icon: BadgeDollarSign }
-    ]
-  },
-  {
-    label: "Operations",
-    items: [
-      { label: "Staff", href: "/staff", icon: ShieldCheck, permission: "users:read" },
-      { label: "Voitures", href: "/cars", icon: Car, permission: "cars:read" },
-      { label: "Clients", href: "/clients", icon: Users, permission: "clients:read" },
-      { label: "Reservations", href: "/reservations", icon: CalendarClock, permission: "reservations:read", disabled: true }
-    ]
-  },
-  {
-    label: "Finance",
-    items: [
-      { label: "Factures", href: "/invoices", icon: FileText, permission: "invoices:read", disabled: true },
-      { label: "Contrats", href: "/contracts", icon: FileText, permission: "contracts:read", disabled: true }
     ]
   },
   {
@@ -70,14 +54,14 @@ const agencyNavigationGroups: NavGroup[] = [
       { label: "Staff", href: "/staff", icon: ShieldCheck, permission: "users:read" },
       { label: "Voitures", href: "/cars", icon: Car, permission: "cars:read" },
       { label: "Clients", href: "/clients", icon: Users, permission: "clients:read" },
-      { label: "Reservations", href: "/reservations", icon: CalendarClock, permission: "reservations:read", disabled: true }
+      { label: "Reservations", href: "/reservations", icon: CalendarClock, permission: "reservations:read" }
     ]
   },
   {
     label: "Finance",
     items: [
       { label: "Factures", href: "/invoices", icon: FileText, permission: "invoices:read", disabled: true },
-      { label: "Contrats", href: "/contracts", icon: FileText, permission: "contracts:read", disabled: true }
+      { label: "Contrats", href: "/contracts", icon: FileText, permission: "contracts:read" }
     ]
   },
   {
@@ -89,8 +73,27 @@ const agencyNavigationGroups: NavGroup[] = [
   }
 ];
 
+const staffNavigationGroups: NavGroup[] = [
+  {
+    label: "Operations",
+    items: [
+      { label: "Dashboard", href: "/staff/dashboard", icon: Gauge, permission: "dashboard:read" },
+      { label: "Reservations", href: "/reservations", icon: CalendarClock, permission: "reservations:read" },
+      { label: "Calendrier", href: "/reservations/calendar", icon: CalendarClock, permission: "reservations:read" },
+      { label: "Clients", href: "/clients", icon: Users, permission: "clients:read" },
+      { label: "Contrats", href: "/contracts", icon: FileText, permission: "contracts:read" }
+    ]
+  },
+  {
+    label: "Systeme",
+    items: [{ label: "Profil", href: "/profile", icon: Settings }]
+  }
+];
+
 export function getNavigationGroups(role: UserRole | undefined) {
-  return role === "SUPER_ADMIN" ? superAdminNavigationGroups : agencyNavigationGroups;
+  if (role === "SUPER_ADMIN") return superAdminNavigationGroups;
+  if (role === "STAFF") return staffNavigationGroups;
+  return agencyNavigationGroups;
 }
 
 export const brandIcon = WalletCards;

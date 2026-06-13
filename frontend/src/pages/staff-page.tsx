@@ -217,27 +217,44 @@ export function StaffPage() {
   }
 
   return (
-    <PageContainer>
-      <AppPageHeader
-        eyebrow="Operations"
-        title="Staff"
-        description="Gestion des employes, statuts et permissions de l'agence."
-        actions={canCreate ? <Button type="button" onClick={() => setForm({ ...emptyForm, agencyId: user?.agencyId ?? "" })}>Creer employe</Button> : null}
-      />
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-bold tracking-widest text-foreground uppercase">
+            Platform Operators
+          </h1>
+          <p className="text-xs uppercase tracking-wider text-muted-foreground">
+            Identity & Access Management
+          </p>
+        </div>
+        
+        {canCreate && (
+          <button 
+            type="button"
+            onClick={() => setForm({ ...emptyForm, agencyId: user?.agencyId ?? "" })}
+            className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            Provision Operator
+          </button>
+        )}
+      </div>
 
       {form ? (
-        <AppSection className="rounded-lg border bg-card p-5" title={form.id ? "Modifier employe" : "Creer employe"}>
+        <div className="glass-card rounded-xl border border-border/50 p-6 shadow-lg shadow-black/50 ring-1 ring-primary/20">
+          <div className="mb-6">
+            <h2 className="text-sm font-bold uppercase tracking-widest text-primary">{form.id ? "Modify Operator Identity" : "Provision New Operator"}</h2>
+          </div>
           <form className="grid gap-4" onSubmit={submitForm}>
             <div className="grid gap-3 md:grid-cols-3">
-              <Input aria-label="firstName" placeholder="Prenom" value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} />
-              <Input aria-label="lastName" placeholder="Nom" value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} />
-              <Input aria-label="phone" placeholder="Telephone" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
+              <Input aria-label="firstName" placeholder="First Name" value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} className="bg-background/50 border-border/50 focus-visible:ring-primary" />
+              <Input aria-label="lastName" placeholder="Last Name" value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} className="bg-background/50 border-border/50 focus-visible:ring-primary" />
+              <Input aria-label="phone" placeholder="Phone" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} className="bg-background/50 border-border/50 focus-visible:ring-primary" />
               {!form.id ? (
                 <>
-                  <Input aria-label="email" placeholder="Email" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
-                  <Input aria-label="password" placeholder="Mot de passe" type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
+                  <Input aria-label="email" placeholder="Email Address" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} className="bg-background/50 border-border/50 focus-visible:ring-primary" />
+                  <Input aria-label="password" placeholder="Password" type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} className="bg-background/50 border-border/50 focus-visible:ring-primary" />
                   <select
-                    className="h-10 rounded-md border bg-background px-3 text-sm"
+                    className="h-10 rounded-md border border-border/50 bg-background/50 px-3 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
                     value={form.role}
                     disabled={!isSuperAdmin}
                     onChange={(event) => {
@@ -245,23 +262,23 @@ export function StaffPage() {
                       setForm({ ...form, role, agencyId: role === "SUPER_ADMIN" ? "" : form.agencyId });
                     }}
                   >
-                    <option value="STAFF">STAFF</option>
+                    <option value="STAFF">OPERATOR (STAFF)</option>
                     {isSuperAdmin ? (
                       <>
-                        <option value="AGENCY_ADMIN">AGENCY_ADMIN</option>
-                        <option value="SUPER_ADMIN">SUPER_ADMIN</option>
+                        <option value="AGENCY_ADMIN">AGENCY COMMANDER (AGENCY_ADMIN)</option>
+                        <option value="SUPER_ADMIN">PLATFORM COMMANDER (SUPER_ADMIN)</option>
                       </>
                     ) : null}
                   </select>
                   {isSuperAdmin && form.role !== "SUPER_ADMIN" ? (
                     <select
-                      className="h-10 rounded-md border bg-background px-3 text-sm"
+                      className="h-10 rounded-md border border-border/50 bg-background/50 px-3 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
                       value={form.agencyId}
                       required
                       aria-label="Agence"
                       onChange={(event) => setForm({ ...form, agencyId: event.target.value })}
                     >
-                      <option value="">Selectionner une agence</option>
+                      <option value="">Assign to Rentora Agency</option>
                       {agencies.map((agency) => (
                         <option key={agency.id} value={agency.id}>
                           {agency.name}
@@ -271,88 +288,101 @@ export function StaffPage() {
                   ) : null}
                 </>
               ) : (
-                <select className="h-10 rounded-md border bg-background px-3 text-sm" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as UserStatus })}>
+                <select className="h-10 rounded-md border border-border/50 bg-background/50 px-3 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as UserStatus })}>
                   <option value="ACTIVE">ACTIVE</option>
                   <option value="INACTIVE">INACTIVE</option>
                   <option value="SUSPENDED">SUSPENDED</option>
                 </select>
               )}
             </div>
-            <PermissionCheckboxes value={form.permissions} onChange={(permissions) => setForm({ ...form, permissions })} />
-            <div className="flex gap-2">
-              <Button type="submit">Enregistrer</Button>
-              <Button type="button" variant="outline" onClick={() => setForm(null)}>Annuler</Button>
+            
+            <div className="mt-4 rounded-lg bg-background/30 p-4 border border-border/50">
+              <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">Access Rights</h3>
+              <PermissionCheckboxes value={form.permissions} onChange={(permissions) => setForm({ ...form, permissions })} />
+            </div>
+            
+            <div className="mt-4 flex gap-2">
+              <Button type="submit" className="bg-primary text-primary-foreground hover:bg-primary/90">Execute Provisioning</Button>
+              <Button type="button" variant="outline" className="border-border/50 bg-transparent" onClick={() => setForm(null)}>Abort</Button>
             </div>
           </form>
-        </AppSection>
+        </div>
       ) : null}
 
       {permissionsTarget ? (
-        <AppSection className="rounded-lg border bg-card p-5" title={`Permissions de ${permissionsTarget.firstName} ${permissionsTarget.lastName}`}>
-          <PermissionCheckboxes value={permissionsTarget.permissions} onChange={(permissions) => setPermissionsTarget({ ...permissionsTarget, permissions })} />
-          <div className="mt-4 flex gap-2">
+        <div className="glass-card rounded-xl border border-border/50 p-6 shadow-lg shadow-black/50 ring-1 ring-primary/20">
+          <div className="mb-6">
+            <h2 className="text-sm font-bold uppercase tracking-widest text-primary">Modify Access Rights: {permissionsTarget.firstName} {permissionsTarget.lastName}</h2>
+          </div>
+          <div className="rounded-lg bg-background/30 p-4 border border-border/50">
+            <PermissionCheckboxes value={permissionsTarget.permissions} onChange={(permissions) => setPermissionsTarget({ ...permissionsTarget, permissions })} />
+          </div>
+          <div className="mt-6 flex gap-2">
             <Button
               type="button"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
               onClick={async () => {
                 try {
                   await updateUserPermissions(permissionsTarget.id, permissionsTarget.permissions);
-                  toast.success("Permissions modifiees");
+                  toast.success("Rights updated");
                   setPermissionsTarget(null);
                   await load();
                 } catch (error) {
-                  toast.error("Modification impossible", { description: getApiErrorMessage(error) });
+                  toast.error("Modification failed", { description: getApiErrorMessage(error) });
                 }
               }}
             >
-              Enregistrer
+              Commit Changes
             </Button>
-            <Button type="button" variant="outline" onClick={() => setPermissionsTarget(null)}>Annuler</Button>
+            <Button type="button" variant="outline" className="border-border/50 bg-transparent" onClick={() => setPermissionsTarget(null)}>Abort</Button>
           </div>
-        </AppSection>
+        </div>
       ) : null}
 
-      <AppSection
-        title="Employes"
-        description={`${staff.length} utilisateur(s) trouve(s).`}
-        actions={
-          <div className="flex gap-2">
-            <select className="h-9 rounded-md border bg-background px-3 text-sm" aria-label="Filtrer role" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}>
-              <option value="">Tous roles</option>
-              <option value="SUPER_ADMIN">SUPER_ADMIN</option>
-              <option value="AGENCY_ADMIN">AGENCY_ADMIN</option>
-              <option value="STAFF">STAFF</option>
+      <div className="glass-card rounded-xl border border-border/50 p-6">
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">Personnel Database</h2>
+            <p className="text-xs text-muted-foreground">{staff.length} active operators.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <select className="h-9 rounded-md border border-border/50 bg-background/50 px-3 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" aria-label="Filtrer role" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}>
+              <option value="">All Ranks</option>
+              <option value="SUPER_ADMIN">Platform Commander</option>
+              <option value="AGENCY_ADMIN">Agency Commander</option>
+              <option value="STAFF">Operator</option>
             </select>
-            <select className="h-9 rounded-md border bg-background px-3 text-sm" aria-label="Filtrer statut" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-              <option value="">Tous statuts</option>
-              <option value="ACTIVE">ACTIVE</option>
-              <option value="INACTIVE">INACTIVE</option>
-              <option value="SUSPENDED">SUSPENDED</option>
+            <select className="h-9 rounded-md border border-border/50 bg-background/50 px-3 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" aria-label="Filtrer statut" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="">All Statuses</option>
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Inactive</option>
+              <option value="SUSPENDED">Suspended</option>
             </select>
           </div>
-        }
-      >
-        <DataTable columns={columns} data={staff} getRowId={(row) => row.id} searchPlaceholder="Rechercher un employe..." />
-        {staff.length === 0 ? <EmptyState title="Aucun employe" description="Les membres staff crees pour cette agence apparaitront ici." /> : null}
-      </AppSection>
+        </div>
+
+        <DataTable columns={columns} data={staff} getRowId={(row) => row.id} searchPlaceholder="Search personnel..." />
+        {staff.length === 0 ? <EmptyState title="No Operators" description="Identity records will appear here." /> : null}
+      </div>
 
       <ConfirmDialog
         open={Boolean(confirmTarget)}
-        title="Confirmer l'action"
-        description="Cette action sera journalisee dans les audit logs."
+        title="Confirm Administrative Action"
+        description="This action will be permanently logged in the audit trail."
         onCancel={() => setConfirmTarget(null)}
         onConfirm={async () => {
           if (!confirmTarget) return;
           try {
             if (confirmTarget.action === "delete") await deleteUser(confirmTarget.user.id);
             else await setUserEnabled(confirmTarget.user.id, confirmTarget.action === "enable");
-            toast.success("Action appliquee");
+            toast.success("Action Executed");
             setConfirmTarget(null);
             await load();
           } catch (error) {
-            toast.error("Action impossible", { description: getApiErrorMessage(error) });
+            toast.error("Execution failed", { description: getApiErrorMessage(error) });
           }
         }}
       />
-    </PageContainer>
+    </div>
   );
 }

@@ -20,7 +20,15 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 function dashboardPathForRole(role: AuthUser["role"]) {
-  return role === "SUPER_ADMIN" ? "/super-admin/dashboard" : "/agency/dashboard";
+  if (role === "SUPER_ADMIN") return "/super-admin/dashboard";
+  if (role === "STAFF") return "/staff/dashboard";
+  return "/agency/dashboard";
+}
+
+function redirectPathFromState(state: unknown) {
+  const from = (state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from;
+  if (!from?.pathname || from.pathname === "/login") return null;
+  return `${from.pathname}${from.search ?? ""}${from.hash ?? ""}`;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -79,9 +87,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await api.post<AuthResponse>("/auth/login", values);
       applyAuth(response.data);
       toast.success("Connexion réussie");
-      navigate(dashboardPathForRole(response.data.user.role), { replace: true });
+      navigate(redirectPathFromState(location.state) ?? dashboardPathForRole(response.data.user.role), { replace: true });
     },
-    [applyAuth, navigate]
+    [applyAuth, location.state, navigate]
   );
 
   const registerAgency = useCallback(

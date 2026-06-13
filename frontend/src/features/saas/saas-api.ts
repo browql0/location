@@ -61,19 +61,182 @@ export type Subscription = {
   plan: SubscriptionPlan;
 };
 
-export type DashboardKpis = {
-  agencies: number;
-  subscriptions: number;
-  users: number;
-  revenueSaas: number;
+export type MonthlyNumberPoint = {
+  month: string;
+  monthKey: string;
+  [key: string]: string | number;
 };
 
-export type AgencyDashboardKpis = {
-  vehicles: number;
-  available: number;
-  maintenance: number;
-  inactive: number;
-  clients: number;
+export type DashboardRange = "7d" | "30d" | "90d" | "1y";
+
+export type SuperAdminDashboardData = {
+  insights: string[];
+  header: {
+    mrr: number;
+    arr: number;
+    activeAgencies: number;
+    churnRate: number;
+    expiringSoon: number;
+    mrrChange: number;
+    arrChange: number;
+    activeAgenciesChange: number;
+    churnChange: number;
+  };
+  kpis: {
+    totalAgencies: number;
+    activeAgencies: number;
+    suspendedAgencies: number;
+    activeSubscriptions: number;
+    mrr: number;
+    arr: number;
+    revenueSaas: number;
+    totalVehicles: number;
+    totalClients: number;
+    totalReservations: number;
+    trialSubscriptions: number;
+    expiringSoon: number;
+  };
+  businessHealth: {
+    mrr: number;
+    arr: number;
+    monthlyGrowth: number;
+    trialConversionRate: number;
+    churnRate: number;
+    suspendedAgencies: number;
+  };
+  topAgencies: Array<{
+    id: string;
+    name: string;
+    logoUrl: string | null;
+    plan: string;
+    mrr: number;
+    revenueTotal: number;
+    reservations: number;
+    clients: number;
+    growth: number;
+    revenueShare: number;
+    badges: Array<"FAST_GROWING" | "STABLE" | "RISK" | "CRITICAL">;
+  }>;
+  risk: {
+    score: number;
+    level: "LOW" | "MEDIUM" | "HIGH";
+    label: string;
+    drivers: Array<{ label: string; value: number; impact: number }>;
+  };
+  alerts: {
+    expiringSubscriptions: number;
+    failedPayments: number;
+    suspendedAgencies: number;
+    openIncidents: number;
+    plansAtLimit: number;
+    items: Array<{
+      id: string;
+      level: "CRITICAL" | "WARNING" | "INFO";
+      title: string;
+      detail: string;
+      count: number;
+    }>;
+  };
+  expirations: Array<{
+    id: string;
+    agencyName: string;
+    plan: string;
+    endsAt: string;
+    daysLeft: number;
+  }>;
+  activity: Array<{
+    id: string;
+    title: string;
+    action: string;
+    entity: string;
+    agencyName: string | null;
+    actorName: string | null;
+    createdAt: string;
+  }>;
+  predictive: {
+    nextMonthMrr: number;
+    nextMonthArr: number;
+    expectedRenewals: number;
+    likelyConversions: number;
+    estimatedGrowth: number;
+    basis: string[];
+  };
+  charts: {
+    agencyGrowth: Array<MonthlyNumberPoint & { agencies: number }>;
+    mrrEvolution: Array<MonthlyNumberPoint & { mrr: number }>;
+    reservations: Array<MonthlyNumberPoint & { reservations: number }>;
+    clients: Array<MonthlyNumberPoint & { clients: number }>;
+    monthComparison: {
+      agencies: { current: number; previous: number; change: number };
+      reservations: { current: number; previous: number; change: number };
+      clients: { current: number; previous: number; change: number };
+      mrr: { current: number; previous: number; change: number };
+    };
+    planDistribution: Array<{ name: string; value: number; percentage: number; mrr: number }>;
+  };
+};
+
+export type SuperAdminSearchResult = {
+  type: string;
+  id: string;
+  title: string;
+  subtitle: string | null;
+  href: string;
+};
+
+export type AgencyDashboardData = {
+  kpis: {
+    availableVehicles: number;
+    rentedVehicles: number;
+    maintenanceVehicles: number;
+    reservationsToday: number;
+    reservationsMonth: number;
+    revenueMonth: number;
+    revenueYear: number;
+    activeClients: number;
+    fleetOccupancyRate: number;
+  };
+  alerts: {
+    upcomingReservations: Array<{
+      id: string;
+      startDate: string;
+      endDate: string;
+      clientName: string;
+      vehicle: string;
+      registrationNumber: string;
+    }>;
+    contractsToSign: number;
+    overduePayments: number;
+    expiredDocuments: number;
+    maintenanceAlerts: number;
+  };
+  charts: {
+    monthlyRevenue: Array<MonthlyNumberPoint & { revenue: number }>;
+    fleetOccupancy: Array<MonthlyNumberPoint & { occupancy: number }>;
+    topVehicles: Array<{ name: string; registrationNumber: string; revenue: number }>;
+  };
+};
+
+export type StaffDashboardData = {
+  kpis: {
+    reservationsCreated: number;
+    contractsCreated: number;
+    activeRentals: number;
+  };
+  work: {
+    myReservations: number;
+    myContracts: number;
+    myClients: number;
+    calendar: Array<{
+      id: string;
+      startDate: string;
+      endDate: string;
+      status: string;
+      clientName: string;
+      vehicle: string;
+      registrationNumber: string;
+    }>;
+  };
 };
 
 export type SubscriptionPlanPayload = {
@@ -97,13 +260,23 @@ export type SubscriptionPlanPayload = {
 type ApiList<T> = { data: T[] };
 type ApiItem<T> = { data: T };
 
-export async function getDashboardKpis() {
-  const response = await api.get<ApiItem<DashboardKpis>>("/dashboard/super-admin");
+export async function getSuperAdminDashboard(range: DashboardRange = "30d") {
+  const response = await api.get<ApiItem<SuperAdminDashboardData>>("/dashboard/super-admin", { params: { range } });
   return response.data.data;
 }
 
-export async function getAgencyDashboardKpis() {
-  const response = await api.get<ApiItem<AgencyDashboardKpis>>("/dashboard/agency");
+export async function searchSuperAdminDashboard(query: string) {
+  const response = await api.get<ApiList<SuperAdminSearchResult>>("/dashboard/super-admin/search", { params: { q: query } });
+  return response.data.data;
+}
+
+export async function getAgencyDashboard() {
+  const response = await api.get<ApiItem<AgencyDashboardData>>("/dashboard/agency");
+  return response.data.data;
+}
+
+export async function getStaffDashboard() {
+  const response = await api.get<ApiItem<StaffDashboardData>>("/dashboard/staff");
   return response.data.data;
 }
 

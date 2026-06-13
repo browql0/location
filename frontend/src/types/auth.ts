@@ -29,6 +29,7 @@ export type Permission =
   | "reservations:delete"
   | "invoices:read"
   | "contracts:read"
+  | "contracts:create"
   | "incidents:read"
   | "incidents:create"
   | "dashboard:read";

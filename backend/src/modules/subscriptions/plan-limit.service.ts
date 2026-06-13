@@ -47,8 +47,9 @@ export const PlanLimitService = {
 
   async assertCanCreateReservation(agencyId: string) {
     const subscription = await getPlanWithCounts(agencyId);
+    const activeReservationCount = await prisma.reservation.count({ where: { agencyId, status: { not: "CANCELLED" } } });
     assertBelowLimit(
-      subscription.agency._count.reservations,
+      activeReservationCount,
       subscription.plan.maxReservations,
       "PLAN_RESERVATION_LIMIT_REACHED",
       "Reservation limit reached for current plan"

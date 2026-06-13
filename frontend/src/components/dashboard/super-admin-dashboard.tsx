@@ -1,102 +1,181 @@
-import { useEffect, useState } from "react";
-import type { ColumnDef } from "@tanstack/react-table";
-import { Building2, CreditCard, Users, Wallet } from "lucide-react";
-import { AppPageHeader } from "@/components/ui-custom/app-page-header";
-import { AppSection } from "@/components/ui-custom/app-section";
-import { DataTable } from "@/components/ui-custom/data-table";
-import { EmptyState } from "@/components/ui-custom/empty-state";
-import { PageContainer } from "@/components/ui-custom/page-container";
-import { StatCard } from "@/components/ui-custom/stat-card";
-import { StatusBadge } from "@/components/ui-custom/status-badge";
-import { moduleEmptyStates } from "@/components/shared/module-empty-states";
-import { useAuth } from "@/features/auth/auth-provider";
-import { getDashboardKpis, type DashboardKpis } from "@/features/saas/saas-api";
-import { getApiErrorMessage } from "@/lib/api-error";
+/* ═══════════════════════════════════════════════════════════════
+   RENTORA EXECUTIVE COMMAND CENTER V2
+   Composer — assembles all 12 dashboard sections.
+   All data comes from GET /dashboard/super-admin?range=...
+   No mock data. If backend unavailable → graceful degradation.
+═══════════════════════════════════════════════════════════════ */
+import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { agencyPreviewData, type AgencyPreview } from "./dashboard-mock-data";
-import { RevenueChart } from "./revenue-chart";
-import { SubscriptionsChart } from "./subscriptions-chart";
 
-const columns: ColumnDef<AgencyPreview>[] = [
-  {
-    accessorKey: "agency",
-    header: "Agence",
-    cell: ({ row }) => <span className="font-medium">{row.original.agency}</span>
-  },
-  {
-    accessorKey: "plan",
-    header: "Plan"
-  },
-  {
-    accessorKey: "status",
-    header: "Statut",
-    cell: ({ row }) => <StatusBadge status={row.original.status} />
-  },
-  {
-    accessorKey: "users",
-    header: "Utilisateurs"
-  },
-  {
-    accessorKey: "mrr",
-    header: "MRR"
-  }
-];
+import { getSuperAdminDashboard, type DashboardRange } from "@/features/saas/saas-api";
+import { getApiErrorMessage } from "@/lib/api-error";
+import { C } from "../super-admin-dashboard/tokens";
 
+/* ─── Section components ────────────────────────────────────── */
+import { ExecutiveInsights }  from "../super-admin-dashboard/ExecutiveInsights";
+import { ExecutiveKpiBar }    from "../super-admin-dashboard/ExecutiveKpiBar";
+import { RevenueEngine }      from "../super-admin-dashboard/RevenueEngine";
+import { TopAgencies }        from "../super-admin-dashboard/TopAgencies";
+import { BusinessRiskScore }  from "../super-admin-dashboard/BusinessRiskScore";
+import { AlertCenter }        from "../super-admin-dashboard/AlertCenter";
+import { ExpirationsCenter }  from "../super-admin-dashboard/ExpirationsCenter";
+import { PredictivePanel }    from "../super-admin-dashboard/PredictivePanel";
+import { GrowthAnalytics }    from "../super-admin-dashboard/GrowthAnalytics";
+import { PlansAnalytics }     from "../super-admin-dashboard/PlansAnalytics";
+import { PlatformActivity }   from "../super-admin-dashboard/PlatformActivity";
+import { CommandShortcuts }   from "../super-admin-dashboard/CommandShortcuts";
+
+/* ─── Skeleton loader ───────────────────────────────────────── */
+function SkeletonPulse({ h }: { h: string }) {
+  return (
+    <div
+      className={`animate-pulse rounded-2xl ${h}`}
+      style={{ background: C.surface }}
+    />
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-5 pb-32" style={{ background: C.bg }}>
+      <SkeletonPulse h="h-52" />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <SkeletonPulse key={i} h="h-36" />
+        ))}
+      </div>
+      <SkeletonPulse h="h-64" />
+      <div className="grid gap-5 xl:grid-cols-[1.6fr_1fr]">
+        <SkeletonPulse h="h-80" />
+        <div className="space-y-5">
+          <SkeletonPulse h="h-36" />
+          <SkeletonPulse h="h-36" />
+        </div>
+      </div>
+      <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+        <SkeletonPulse h="h-48" />
+        <SkeletonPulse h="h-48" />
+      </div>
+      <SkeletonPulse h="h-96" />
+      <div className="grid gap-5 xl:grid-cols-[1fr_1.2fr]">
+        <SkeletonPulse h="h-64" />
+        <SkeletonPulse h="h-64" />
+      </div>
+    </div>
+  );
+}
+
+/* ─── Error state ────────────────────────────────────────────── */
+function DashboardError({ message }: { message: string }) {
+  return (
+    <div
+      className="flex min-h-screen items-center justify-center"
+      style={{ background: C.bg }}
+    >
+      <div
+        className="max-w-md w-full rounded-2xl p-8 text-center"
+        style={{ background: C.surface, border: `1px solid ${C.danger}40` }}
+      >
+        <div
+          className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl"
+          style={{ background: C.dangerGlow, border: `1px solid ${C.danger}40` }}
+        >
+          <span className="text-2xl">⚠</span>
+        </div>
+        <h2 className="text-lg font-bold mb-2" style={{ color: C.text }}>
+          Données indisponibles
+        </h2>
+        <p className="text-sm" style={{ color: C.muted }}>
+          {message}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Root component ─────────────────────────────────────────── */
 export function SuperAdminDashboard() {
-  const { user } = useAuth();
-  const [kpis, setKpis] = useState<DashboardKpis | null>(null);
+  const [range, setRange] = useState<DashboardRange>("30d");
+
+  const query = useQuery({
+    queryKey:  ["super-admin-dashboard", range],
+    queryFn:   () => getSuperAdminDashboard(range),
+    staleTime: 60_000
+  });
 
   useEffect(() => {
-    async function loadKpis() {
-      try {
-        setKpis(await getDashboardKpis());
-      } catch (error) {
-        setKpis(null);
-        toast.error("Chargement des KPIs impossible", { description: getApiErrorMessage(error) });
-      }
+    if (query.error) {
+      toast.error("Chargement du command center impossible", {
+        description: getApiErrorMessage(query.error)
+      });
     }
+  }, [query.error]);
 
-    void loadKpis();
-  }, []);
+  if (query.isLoading) return <DashboardSkeleton />;
+  if (query.isError || !query.data) {
+    return (
+      <DashboardError
+        message={
+          query.error
+            ? getApiErrorMessage(query.error)
+            : "Le dashboard n'a pas pu être chargé."
+        }
+      />
+    );
+  }
 
-  const revenue = `${(kpis?.revenueSaas ?? 0).toLocaleString("fr-MA")} MAD`;
+  const d = query.data;
 
   return (
-    <PageContainer>
-      <AppPageHeader
-        eyebrow="Super Admin"
-        title="Dashboard"
-        description={`Vue de pilotage temporaire pour ${user?.firstName ?? "l'equipe"}: revenus, abonnements et activite SaaS. Donnees mockees pour la fondation UI.`}
+    <div
+      className="min-h-screen pb-32"
+      style={{ color: C.text }}
+    >
+      {/* Ambient top glow */}
+      <div
+        className="pointer-events-none fixed inset-0 z-0"
+        style={{
+          background: `radial-gradient(ellipse 70% 40% at 50% -10%, ${C.accentGlow} 0%, transparent 55%)`
+        }}
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard description="Agences en base PostgreSQL" icon={Building2} title="Agences" value={String(kpis?.agencies ?? "-")} />
-        <StatCard description="Abonnements actifs, trial et past due" icon={CreditCard} title="Abonnements" value={String(kpis?.subscriptions ?? "-")} />
-        <StatCard description="Utilisateurs reels" icon={Users} title="Utilisateurs" value={String(kpis?.users ?? "-")} />
-        <StatCard description="MRR calcule depuis les abonnements actifs" icon={Wallet} title="Revenus SaaS" value={revenue} />
-      </div>
+      <div className="relative z-10 space-y-5">
 
-      <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
-        <AppSection className="rounded-lg border bg-card p-5 shadow-sm" title="Evolution revenus" description="Revenus mensuels recurrents mockes.">
-          <RevenueChart />
-        </AppSection>
-        <AppSection className="rounded-lg border bg-card p-5 shadow-sm" title="Abonnements" description="Repartition temporaire des plans.">
-          <SubscriptionsChart />
-        </AppSection>
-      </div>
+        {/* ── Section 1: Executive Insights ── */}
+        <ExecutiveInsights insights={d.insights} />
 
-      <AppSection title="Apercu agences" description="Table TanStack reusable avec recherche, tri, pagination et selection multiple.">
-        <DataTable columns={columns} data={agencyPreviewData} getRowId={(row) => row.id} searchPlaceholder="Rechercher une agence..." />
-      </AppSection>
+        {/* ── Section 2: Executive KPI Bar ── */}
+        <ExecutiveKpiBar header={d.header} />
 
-      <AppSection title="Etats vides modules" description="Modeles reutilisables pour les prochaines phases.">
-        <div className="grid gap-4 md:grid-cols-2">
-          <EmptyState {...moduleEmptyStates.agencies} />
-          <EmptyState {...moduleEmptyStates.cars} />
-          <EmptyState {...moduleEmptyStates.clients} />
-          <EmptyState {...moduleEmptyStates.reservations} />
+        {/* ── Section 3: Revenue Engine ── */}
+        <RevenueEngine
+          health={d.businessHealth}
+          mrrChart={d.charts.mrrEvolution}
+        />
+
+        {/* ── Dashboard Content ── */}
+        <div className="grid gap-5 xl:grid-cols-[1.5fr_1fr] items-start">
+          {/* Left Column */}
+          <div className="flex flex-col gap-5">
+            <TopAgencies agencies={d.topAgencies} />
+            <GrowthAnalytics charts={d.charts} range={range} setRange={setRange} />
+            <PlatformActivity activity={d.activity} />
+            <CommandShortcuts />
+          </div>
+
+          {/* Right Column */}
+          <div className="flex flex-col gap-5">
+            <BusinessRiskScore risk={d.risk} />
+            <AlertCenter alerts={d.alerts} />
+            <PredictivePanel predictive={d.predictive} />
+            <ExpirationsCenter expirations={d.expirations} />
+            <PlansAnalytics plans={d.charts.planDistribution} />
+          </div>
         </div>
-      </AppSection>
-    </PageContainer>
+
+      </div>
+
+    </div>
   );
 }

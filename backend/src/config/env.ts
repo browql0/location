@@ -13,6 +13,7 @@ const envSchema = z.object({
   JWT_ACCESS_EXPIRES_IN: z.string().default("15m"),
   JWT_REFRESH_EXPIRES_IN: z.string().default("30d"),
   CORS_ORIGIN: z.string().default("http://localhost:5173,http://127.0.0.1:5173"),
+  FRONTEND_APP_URL: z.string().url().default("http://localhost:5173"),
   FILE_STORAGE_DRIVER: z.enum(["local", "r2"]).default("local"),
   R2_ACCOUNT_ID: z.string().optional().default(""),
   R2_ACCESS_KEY_ID: z.string().optional().default(""),

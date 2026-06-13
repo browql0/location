@@ -1,11 +1,17 @@
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { revenueData } from "./dashboard-mock-data";
 
-export function RevenueChart() {
+type RevenueChartProps = {
+  data: Array<{ month: string; [key: string]: string | number }>;
+  dataKey?: string;
+  label?: string;
+  suffix?: string;
+};
+
+export function RevenueChart({ data, dataKey = "revenue", label = "Revenus", suffix = "MAD" }: RevenueChartProps) {
   return (
     <div className="h-72 w-full">
       <ResponsiveContainer height="100%" width="100%">
-        <AreaChart data={revenueData} margin={{ left: 0, right: 8, top: 12 }}>
+        <AreaChart data={data} margin={{ left: 0, right: 8, top: 12 }}>
           <defs>
             <linearGradient id="revenueFill" x1="0" x2="0" y1="0" y2="1">
               <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.22} />
@@ -22,9 +28,9 @@ export function RevenueChart() {
               borderRadius: 8,
               color: "hsl(var(--foreground))"
             }}
-            formatter={(value) => [`${Number(value).toLocaleString("fr-MA")} MAD`, "Revenus"]}
+            formatter={(value) => [`${Number(value).toLocaleString("fr-MA")}${suffix ? ` ${suffix}` : ""}`, label]}
           />
-          <Area dataKey="revenue" fill="url(#revenueFill)" stroke="hsl(var(--primary))" strokeWidth={2} type="monotone" />
+          <Area dataKey={dataKey} fill="url(#revenueFill)" stroke="hsl(var(--primary))" strokeWidth={2} type="monotone" />
         </AreaChart>
       </ResponsiveContainer>
     </div>

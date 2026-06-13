@@ -8,13 +8,20 @@ import { ClientsPage } from "@/pages/clients-page";
 import { CarDetailPage } from "@/pages/car-detail-page";
 import { CarFormPage } from "@/pages/car-form-page";
 import { CarsPage } from "@/pages/cars-page";
+import { ContractDetailPage } from "@/pages/contract-detail-page";
+import { ContractsPage } from "@/pages/contracts-page";
 import { DashboardPage } from "@/pages/dashboard-page";
 import { LoginPage } from "@/pages/login-page";
 import { NotFoundPage } from "@/pages/not-found-page";
 import { ProfilePage } from "@/pages/profile-page";
 import { RegisterAgencyPage } from "@/pages/register-agency-page";
+import { ReservationDetailPage } from "@/pages/reservation-detail-page";
+import { ReservationFormPage } from "@/pages/reservation-form-page";
+import { ReservationsCalendarPage } from "@/pages/reservations-calendar-page";
+import { ReservationsPage } from "@/pages/reservations-page";
 import { SettingsSubscriptionPage } from "@/pages/settings-subscription-page";
 import { StaffPage } from "@/pages/staff-page";
+import { StaffDashboardPage } from "@/pages/staff-dashboard-page";
 import { SuperAdminAgenciesPage } from "@/pages/super-admin-agencies-page";
 import { SuperAdminDashboardPage } from "@/pages/super-admin-dashboard-page";
 import { SuperAdminPlansPage } from "@/pages/super-admin-plans-page";
@@ -61,11 +68,25 @@ export const router = createBrowserRouter([
                 ]
               },
               {
-                element: <PermissionGuard permissions={["dashboard:read"]} />,
+                element: <RoleGuard roles={["AGENCY_ADMIN"]} />,
                 children: [
                   {
                     path: "agency/dashboard",
                     element: <AgencyDashboardPage />
+                  }
+                ]
+              },
+              {
+                element: <RoleGuard roles={["STAFF"]} />,
+                children: [
+                  {
+                    element: <PermissionGuard permissions={["dashboard:read"]} />,
+                    children: [
+                      {
+                        path: "staff/dashboard",
+                        element: <StaffDashboardPage />
+                      }
+                    ]
                   }
                 ]
               },
@@ -139,6 +160,33 @@ export const router = createBrowserRouter([
                     path: "clients/:id/edit",
                     element: <ClientFormPage />
                   }
+                ]
+              },
+              {
+                element: <PermissionGuard permissions={["reservations:read"]} />,
+                children: [
+                  { path: "reservations", element: <ReservationsPage /> },
+                  { path: "reservations/calendar", element: <ReservationsCalendarPage /> },
+                  { path: "reservations/:id", element: <ReservationDetailPage /> }
+                ]
+              },
+              {
+                element: <PermissionGuard permissions={["reservations:create"]} />,
+                children: [
+                  { path: "reservations/new", element: <ReservationFormPage /> }
+                ]
+              },
+              {
+                element: <PermissionGuard permissions={["reservations:update"]} />,
+                children: [
+                  { path: "reservations/:id/edit", element: <ReservationFormPage /> }
+                ]
+              },
+              {
+                element: <PermissionGuard permissions={["contracts:read"]} />,
+                children: [
+                  { path: "contracts", element: <ContractsPage /> },
+                  { path: "contracts/:id", element: <ContractDetailPage /> }
                 ]
               },
               {

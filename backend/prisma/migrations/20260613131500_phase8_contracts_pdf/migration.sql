@@ -1,0 +1,14 @@
+ALTER TABLE "Contract"
+ADD COLUMN "generatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN "pdfPath" TEXT,
+ADD COLUMN "signedAt" TIMESTAMP(3);
+
+UPDATE "Contract"
+SET "pdfPath" = "pdfUrl"
+WHERE "pdfUrl" IS NOT NULL;
+
+ALTER TABLE "Contract"
+DROP COLUMN IF EXISTS "pdfUrl",
+DROP COLUMN IF EXISTS "signedByClient",
+DROP COLUMN IF EXISTS "signedByAgency",
+DROP COLUMN IF EXISTS "archivedAt";

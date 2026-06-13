@@ -9,4 +9,6 @@ export const dashboardRouter = Router();
 
 dashboardRouter.use(authMiddleware);
 dashboardRouter.get("/super-admin", requireRole(UserRole.SUPER_ADMIN), controller.getSuperAdminDashboard);
-dashboardRouter.get("/agency", requirePermission("dashboard:read"), controller.getAgencyDashboard);
+dashboardRouter.get("/super-admin/search", requireRole(UserRole.SUPER_ADMIN), controller.searchSuperAdminDashboard);
+dashboardRouter.get("/agency", requireRole(UserRole.AGENCY_ADMIN), requirePermission("dashboard:read"), controller.getAgencyDashboard);
+dashboardRouter.get("/staff", requireRole(UserRole.STAFF), requirePermission("dashboard:read"), controller.getStaffDashboard);

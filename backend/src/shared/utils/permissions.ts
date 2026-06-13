@@ -26,6 +26,7 @@ export const permissions = [
   "reservations:delete",
   "invoices:read",
   "contracts:read",
+  "contracts:create",
   "incidents:read",
   "incidents:create",
   "dashboard:read"
@@ -58,6 +59,7 @@ const agencyAdminPermissions: Permission[] = [
   "reservations:delete",
   "invoices:read",
   "contracts:read",
+  "contracts:create",
   "incidents:read",
   "incidents:create",
   "dashboard:read"

@@ -91,58 +91,69 @@ export function ClientsPage() {
   );
 
   return (
-    <PageContainer>
-      <AppPageHeader
-        eyebrow="Clients"
-        title="Clients"
-        description="Gestion des profils clients, documents et verification de risque."
-        actions={canCreate ? (
-          <Button asChild>
-            <Link to="/clients/new"><Plus className="mr-2 h-4 w-4" /> Nouveau client</Link>
-          </Button>
-        ) : null}
-      />
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-bold tracking-widest text-foreground uppercase">
+            Risk & Trust Network
+          </h1>
+          <p className="text-xs uppercase tracking-wider text-muted-foreground">
+            Client Registry & Profiling
+          </p>
+        </div>
+        
+        {canCreate && (
+          <Link 
+            to="/clients/new" 
+            className="inline-flex h-10 items-center justify-center rounded-md bg-emerald-500 px-4 text-sm font-medium text-white transition-colors hover:bg-emerald-600"
+          >
+            <Plus className="mr-2 h-4 w-4" /> Add Client Profile
+          </Link>
+        )}
+      </div>
 
-      <AppSection
-        title="Base clients"
-        description={isLoading ? "Chargement..." : `${clients.length} client(s) trouve(s).`}
-        actions={
+      <div className="glass-card rounded-xl border border-border/50 p-6">
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">Registry Database</h2>
+            <p className="text-xs text-muted-foreground">{isLoading ? "Loading profiles..." : `${clients.length} authenticated profiles.`}</p>
+          </div>
           <div className="flex flex-wrap gap-2">
-            <input className="h-9 rounded-md border bg-background px-3 text-sm" placeholder="Ville" value={cityFilter} onChange={(event) => setCityFilter(event.target.value)} />
-            <select className="h-9 rounded-md border bg-background px-3 text-sm" value={cinFilter} onChange={(event) => setCinFilter(event.target.value)}>
-              <option value="">CIN: tous</option>
-              <option value="yes">Avec CIN</option>
-              <option value="no">Sans CIN</option>
+            <input className="h-9 rounded-md border border-border/50 bg-background/50 px-3 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" placeholder="City Filter" value={cityFilter} onChange={(event) => setCityFilter(event.target.value)} />
+            <select className="h-9 rounded-md border border-border/50 bg-background/50 px-3 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" value={cinFilter} onChange={(event) => setCinFilter(event.target.value)}>
+              <option value="">CIN: All</option>
+              <option value="yes">Verified CIN</option>
+              <option value="no">Missing CIN</option>
             </select>
-            <select className="h-9 rounded-md border bg-background px-3 text-sm" value={licenseFilter} onChange={(event) => setLicenseFilter(event.target.value)}>
-              <option value="">Permis: tous</option>
-              <option value="yes">Avec permis</option>
-              <option value="no">Sans permis</option>
+            <select className="h-9 rounded-md border border-border/50 bg-background/50 px-3 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" value={licenseFilter} onChange={(event) => setLicenseFilter(event.target.value)}>
+              <option value="">License: All</option>
+              <option value="yes">Verified License</option>
+              <option value="no">Missing License</option>
             </select>
           </div>
-        }
-      >
-        {isLoading ? <TableSkeleton /> : <DataTable columns={columns} data={clients} getRowId={(row) => row.id} searchPlaceholder="Rechercher nom, telephone, email, CIN, permis..." />}
-        {!isLoading && clients.length === 0 ? <EmptyState title="Aucun client" description="Les clients ajoutes a cette agence apparaitront ici." /> : null}
-      </AppSection>
+        </div>
+
+        {isLoading ? <TableSkeleton /> : <DataTable columns={columns} data={clients} getRowId={(row) => row.id} searchPlaceholder="Search profiles by name, phone, email..." />}
+        {!isLoading && clients.length === 0 ? <EmptyState title="No Profiles" description="Client intelligence will appear here." /> : null}
+      </div>
 
       <ConfirmDialog
         open={Boolean(confirmTarget)}
-        title="Supprimer le client"
-        description="Le client sera masque par soft delete et restera conserve en base."
+        title="Revoke Profile"
+        description="This profile will be archived and removed from active operations."
         onCancel={() => setConfirmTarget(null)}
         onConfirm={async () => {
           if (!confirmTarget) return;
           try {
             await deleteClient(confirmTarget.id);
-            toast.success("Client supprime");
+            toast.success("Profile revoked");
             setConfirmTarget(null);
             await load();
           } catch (error) {
-            toast.error("Suppression impossible", { description: getApiErrorMessage(error) });
+            toast.error("Action failed", { description: getApiErrorMessage(error) });
           }
         }}
       />
-    </PageContainer>
+    </div>
   );
 }

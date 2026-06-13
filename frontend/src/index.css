@@ -1,80 +1,133 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 0 0% 99%;
+    /* Light theme (unused in dark-first, kept for compatibility) */
+    --background: 210 20% 98%;
     --foreground: 222 30% 8%;
     --card: 0 0% 100%;
     --card-foreground: 222 30% 8%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 30% 8%;
-    --primary: 222 84% 5%;
+    --primary: 22 90% 55%;
     --primary-foreground: 210 40% 98%;
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 222 30% 8%;
-    --muted: 220 14% 96%;
-    --muted-foreground: 220 9% 43%;
-    --accent: 220 14% 94%;
-    --accent-foreground: 222 30% 8%;
+    --secondary: 210 20% 94%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 20% 94%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 210 20% 90%;
+    --accent-foreground: 222 47% 11%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 220 13% 90%;
-    --input: 220 13% 90%;
-    --ring: 222 84% 5%;
-    --radius: 0.5rem;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 22 90% 55%;
+    --radius: 0.625rem;
   }
 
   .dark {
-    --background: 222 32% 7%;
-    --foreground: 210 40% 98%;
-    --card: 222 28% 9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222 28% 9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222 32% 7%;
-    --secondary: 222 20% 15%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 222 20% 15%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 222 20% 18%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
+    /* ═══════════════════════════════════════════
+       FLEET COMMAND CENTER — PREMIUM DARK THEME
+       Graphite / Carbon / Electric Orange / Neon Blue
+    ═══════════════════════════════════════════ */
+
+    /* Deep graphite background */
+    --background: 225 16% 6%;
+    --foreground: 214 32% 95%;
+
+    /* Carbon surface */
+    --card: 225 13% 9%;
+    --card-foreground: 214 32% 95%;
+
+    /* Popover */
+    --popover: 225 13% 9%;
+    --popover-foreground: 214 32% 95%;
+
+    /* Primary: Electric Copper/Orange  */
+    --primary: 24 95% 53%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: Carbon layer */
+    --secondary: 225 12% 14%;
+    --secondary-foreground: 214 32% 95%;
+
+    /* Muted: Dark slate */
+    --muted: 225 10% 17%;
+    --muted-foreground: 215 18% 55%;
+
+    /* Accent: Steel hover */
+    --accent: 225 14% 16%;
+    --accent-foreground: 214 32% 95%;
+
+    /* Danger */
+    --destructive: 0 70% 45%;
     --destructive-foreground: 210 40% 98%;
-    --border: 222 18% 18%;
-    --input: 222 18% 18%;
-    --ring: 210 40% 80%;
+
+    /* Borders / inputs */
+    --border: 225 12% 16%;
+    --input: 225 12% 14%;
+
+    /* Focus ring */
+    --ring: 24 95% 53%;
+
+    /* Radius */
+    --radius: 0.625rem;
   }
 
   * {
     @apply border-border;
   }
 
+  html {
+    @apply scroll-smooth;
+  }
+
   body {
-    @apply bg-background text-foreground antialiased;
-    font-feature-settings:
-      "rlig" 1,
-      "calt" 1;
+    @apply bg-background text-foreground antialiased selection:bg-primary/25 selection:text-primary-foreground;
+    font-family: "Inter", system-ui, -apple-system, sans-serif;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
   }
 
   :focus-visible {
     @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
   }
+
+  /* Custom scrollbar — dark carbon style */
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--background));
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
 }
 
 @layer components {
+  /* ──────────────────────────────────────────
+     TYPOGRAPHY SYSTEM
+  ────────────────────────────────────────── */
+
   .page-title {
-    @apply text-2xl font-semibold tracking-normal text-foreground md:text-3xl;
+    @apply text-2xl font-black tracking-[0.12em] text-foreground uppercase md:text-3xl;
   }
 
   .section-title {
-    @apply text-base font-semibold tracking-normal text-foreground;
+    @apply text-[11px] font-bold uppercase tracking-widest text-muted-foreground/70;
   }
 
   .card-title {
-    @apply text-sm font-medium tracking-normal text-foreground;
+    @apply text-sm font-bold uppercase tracking-widest text-foreground;
   }
 
   .body-text {
@@ -82,6 +135,118 @@
   }
 
   .muted-text {
-    @apply text-sm leading-6 text-muted-foreground;
+    @apply text-xs leading-5 text-muted-foreground;
+  }
+
+  /* ──────────────────────────────────────────
+     GLASSMORPHISM SYSTEM
+  ────────────────────────────────────────── */
+
+  .glass-panel {
+    @apply bg-background/70 backdrop-blur-xl border border-border/40 shadow-[0_4px_24px_rgba(0,0,0,0.3)];
+  }
+
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-xl border border-border/40 shadow-[0_4px_24px_rgba(0,0,0,0.25)];
+  }
+
+  .glass-card-elevated {
+    @apply bg-card/90 backdrop-blur-2xl border border-border/50 shadow-[0_8px_40px_rgba(0,0,0,0.4)];
+  }
+
+  /* ──────────────────────────────────────────
+     FLEET COMMAND CARDS
+  ────────────────────────────────────────── */
+
+  .command-card {
+    @apply relative overflow-hidden rounded-xl bg-card/80 backdrop-blur-xl border border-border/40 shadow-[0_4px_24px_rgba(0,0,0,0.3)] transition-all duration-200;
+  }
+
+  .command-card:hover {
+    @apply border-border/60 shadow-[0_8px_32px_rgba(0,0,0,0.4)];
+  }
+
+  /* Premium subtle scanline overlay for command-center feel */
+  .scanlines::after {
+    content: "";
+    @apply pointer-events-none absolute inset-0 z-10 opacity-[0.015];
+    background-image: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(255, 255, 255, 0.1) 2px,
+      rgba(255, 255, 255, 0.1) 4px
+    );
+  }
+
+  /* ──────────────────────────────────────────
+     STATUS PILLS
+  ────────────────────────────────────────── */
+
+  .status-pill {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border;
+  }
+
+  .status-available {
+    @apply bg-emerald-500/10 text-emerald-400 border-emerald-500/25;
+  }
+
+  .status-rented {
+    @apply bg-blue-500/10 text-blue-400 border-blue-500/25;
+  }
+
+  .status-maintenance {
+    @apply bg-amber-500/10 text-amber-400 border-amber-500/25;
+  }
+
+  .status-inactive {
+    @apply bg-slate-500/10 text-slate-400 border-slate-500/25;
+  }
+
+  /* ──────────────────────────────────────────
+     ANIMATIONS
+  ────────────────────────────────────────── */
+
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(251, 146, 60, 0); }
+    50% { box-shadow: 0 0 12px 4px rgba(251, 146, 60, 0.2); }
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 3s ease-in-out infinite;
+  }
+
+  @keyframes scan {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100%); }
+  }
+
+  .animate-scan {
+    animation: scan 3s linear infinite;
+  }
+
+  /* ──────────────────────────────────────────
+     CUSTOM SCROLLBAR CLASS
+  ────────────────────────────────────────── */
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 999px;
+  }
+
+  /* ──────────────────────────────────────────
+     TABULAR NUMS UTILITY
+  ────────────────────────────────────────── */
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
   }
 }

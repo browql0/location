@@ -1,54 +1,129 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Car, CheckCircle2, PauseCircle, Users, Wrench } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { AlertTriangle, CalendarClock, Car, FileSignature, Gauge, Users, Wallet } from "lucide-react";
 import { toast } from "sonner";
-import { AppPageHeader } from "@/components/ui-custom/app-page-header";
-import { AppSection } from "@/components/ui-custom/app-section";
-import { EmptyState } from "@/components/ui-custom/empty-state";
-import { PageContainer } from "@/components/ui-custom/page-container";
 import { StatCard } from "@/components/ui-custom/stat-card";
-import { useAuth } from "@/features/auth/auth-provider";
-import { getAgencyDashboardKpis, type AgencyDashboardKpis } from "@/features/saas/saas-api";
+import { getAgencyDashboard, type AgencyDashboardData } from "@/features/saas/saas-api";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { RevenueChart } from "./revenue-chart";
+
+function money(value: number) {
+  return `${Math.round(value).toLocaleString("fr-MA")} MAD`;
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString("fr-MA", { day: "2-digit", month: "short" });
+}
 
 export function AgencyDashboard() {
-  const { user } = useAuth();
-  const [kpis, setKpis] = useState<AgencyDashboardKpis | null>(null);
+  const [dashboard, setDashboard] = useState<AgencyDashboardData | null>(null);
 
   useEffect(() => {
     async function load() {
       try {
-        setKpis(await getAgencyDashboardKpis());
+        setDashboard(await getAgencyDashboard());
       } catch (error) {
-        toast.error("Chargement des KPIs impossible", { description: getApiErrorMessage(error) });
+        toast.error("Chargement du dashboard agence impossible", { description: getApiErrorMessage(error) });
       }
     }
 
     void load();
   }, []);
 
-  return (
-    <PageContainer>
-      <AppPageHeader
-        eyebrow={user?.role === "STAFF" ? "Staff" : "Agence"}
-        title="Dashboard agence"
-        description={`Vue operationnelle de ${user?.agency?.name ?? "votre agence"}. Donnees flotte et clients issues de PostgreSQL.`}
-      />
+  const kpis = dashboard?.kpis;
+  const alerts = dashboard?.alerts;
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <StatCard description="Vehicules actifs en flotte" icon={Car} title="Vehicules" value={String(kpis?.vehicles ?? "-")} />
-        <StatCard description="Clients actifs en base" icon={Users} title="Clients" value={String(kpis?.clients ?? "-")} />
-        <StatCard description="Prets a louer" icon={CheckCircle2} title="Disponibles" value={String(kpis?.available ?? "-")} />
-        <StatCard description="En intervention" icon={Wrench} title="Maintenance" value={String(kpis?.maintenance ?? "-")} />
-        <StatCard description="Hors service" icon={PauseCircle} title="Inactifs" value={String(kpis?.inactive ?? "-")} />
+  return (
+    <div className="space-y-6 pb-20">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-bold uppercase text-foreground">Pilotage agence</h1>
+        <p className="text-sm text-muted-foreground">Flotte, reservations, revenus et alertes operationnelles.</p>
       </div>
 
-      <AppSection className="rounded-lg border bg-card p-5" title="Modules agence">
-        <EmptyState
-          icon={AlertTriangle}
-          title="Historique futur"
-          description="Les reservations, contrats, factures et paiements resteront vides jusqu'aux prochaines phases."
-        />
-      </AppSection>
-    </PageContainer>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <StatCard title="Vehicules disponibles" value={String(kpis?.availableVehicles ?? "-")} icon={Car} />
+        <StatCard title="Vehicules loues" value={String(kpis?.rentedVehicles ?? "-")} icon={Car} />
+        <StatCard title="Vehicules maintenance" value={String(kpis?.maintenanceVehicles ?? "-")} icon={AlertTriangle} />
+        <StatCard title="Reservations du jour" value={String(kpis?.reservationsToday ?? "-")} icon={CalendarClock} />
+        <StatCard title="Reservations du mois" value={String(kpis?.reservationsMonth ?? "-")} icon={CalendarClock} />
+        <StatCard title="Revenus du mois" value={kpis ? money(kpis.revenueMonth) : "-"} icon={Wallet} />
+        <StatCard title="Revenus annuels" value={kpis ? money(kpis.revenueYear) : "-"} icon={Wallet} />
+        <StatCard title="Clients actifs" value={String(kpis?.activeClients ?? "-")} icon={Users} />
+        <StatCard title="Occupation flotte" value={kpis ? `${kpis.fleetOccupancyRate}%` : "-"} icon={Gauge} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-5">
+        <StatCard title="Contrats a signer" value={String(alerts?.contractsToSign ?? "-")} icon={FileSignature} />
+        <StatCard title="Paiements en retard" value={String(alerts?.overduePayments ?? "-")} icon={Wallet} />
+        <StatCard title="Documents expires" value={String(alerts?.expiredDocuments ?? "-")} icon={AlertTriangle} />
+        <StatCard title="Alertes maintenance" value={String(alerts?.maintenanceAlerts ?? "-")} icon={AlertTriangle} />
+        <StatCard title="Reservations a venir" value={String(alerts?.upcomingReservations.length ?? "-")} icon={CalendarClock} />
+      </div>
+
+      <section className="rounded-lg border bg-card p-5 shadow-sm">
+        <div className="mb-5">
+          <h2 className="text-sm font-semibold uppercase text-foreground">Reservations a venir</h2>
+          <p className="text-sm text-muted-foreground">Prochains departs confirmes.</p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {(alerts?.upcomingReservations ?? []).map((reservation) => (
+            <div className="rounded-lg border bg-background p-4" key={reservation.id}>
+              <div className="text-sm font-semibold text-foreground">{reservation.clientName}</div>
+              <div className="mt-1 text-sm text-muted-foreground">{reservation.vehicle} · {reservation.registrationNumber}</div>
+              <div className="mt-3 text-xs uppercase text-muted-foreground">{formatDate(reservation.startDate)} - {formatDate(reservation.endDate)}</div>
+            </div>
+          ))}
+          {alerts?.upcomingReservations.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">Aucune reservation a venir.</div>
+          ) : null}
+        </div>
+      </section>
+
+      <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+        <section className="rounded-lg border bg-card p-5 shadow-sm">
+          <div className="mb-5">
+            <h2 className="text-sm font-semibold uppercase text-foreground">Revenus mensuels</h2>
+            <p className="text-sm text-muted-foreground">Reservations confirmees, en cours et terminees.</p>
+          </div>
+          <RevenueChart data={dashboard?.charts.monthlyRevenue ?? []} />
+        </section>
+
+        <section className="rounded-lg border bg-card p-5 shadow-sm">
+          <div className="mb-5">
+            <h2 className="text-sm font-semibold uppercase text-foreground">Occupation flotte</h2>
+            <p className="text-sm text-muted-foreground">Taux mensuel estime.</p>
+          </div>
+          <div className="h-72">
+            <ResponsiveContainer height="100%" width="100%">
+              <LineChart data={dashboard?.charts.fleetOccupancy ?? []} margin={{ left: 0, right: 8, top: 12 }}>
+                <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
+                <XAxis axisLine={false} dataKey="month" tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
+                <YAxis axisLine={false} tickFormatter={(value) => `${value}%`} tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} width={42} />
+                <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} formatter={(value) => [`${value}%`, "Occupation"]} />
+                <Line dataKey="occupancy" dot={false} stroke="#10b981" strokeWidth={2} type="monotone" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+      </div>
+
+      <section className="rounded-lg border bg-card p-5 shadow-sm">
+        <div className="mb-5">
+          <h2 className="text-sm font-semibold uppercase text-foreground">Top vehicules rentables</h2>
+          <p className="text-sm text-muted-foreground">Classement annuel par revenu de reservation.</p>
+        </div>
+        <div className="h-72">
+          <ResponsiveContainer height="100%" width="100%">
+            <BarChart data={dashboard?.charts.topVehicles ?? []} layout="vertical" margin={{ left: 8, right: 24, top: 8 }}>
+              <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" horizontal={false} />
+              <XAxis axisLine={false} tickFormatter={(value) => `${Number(value) / 1000}k`} tickLine={false} type="number" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
+              <YAxis axisLine={false} dataKey="name" tickLine={false} type="category" width={140} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
+              <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} formatter={(value) => [`${Number(value).toLocaleString("fr-MA")} MAD`, "Revenu"]} />
+              <Bar dataKey="revenue" fill="#0ea5e9" radius={[0, 6, 6, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
+    </div>
   );
 }

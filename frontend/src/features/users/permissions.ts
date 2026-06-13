@@ -45,7 +45,8 @@ export const permissionGroups: Array<{ label: string; permissions: Array<{ value
     label: "Finance",
     permissions: [
       { value: "invoices:read", label: "Lire factures" },
-      { value: "contracts:read", label: "Lire contrats" }
+      { value: "contracts:read", label: "Lire contrats" },
+      { value: "contracts:create", label: "Creer contrats" }
     ]
   },
   {
