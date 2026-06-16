@@ -215,8 +215,7 @@ export async function addDocument(clientId: string, input: CreateClientDocumentI
       fileName: file.originalname,
       mimeType: file.mimetype,
       size: file.size,
-      storageKey: saved.storageKey,
-      fileUrl: saved.fileUrl
+      storageKey: saved.storageKey
     }
   });
 

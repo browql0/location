@@ -1,7 +1,7 @@
 import type { Request, RequestHandler, Response } from "express";
 import { CarStatus } from "@prisma/client";
 import { asyncHandler } from "../../middlewares/async-handler.js";
-import { carQuerySchema } from "./car.schemas.js";
+import { carQuerySchema, createCarDocumentSchema } from "./car.schemas.js";
 import * as service from "./car.service.js";
 
 function requestMeta(req: Request) {
@@ -72,7 +72,14 @@ export const listDocuments: RequestHandler = asyncHandler(async (req: Request, r
 });
 
 export const addDocument: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
-  res.status(201).json({ data: await service.addDocument(String(req.params.id), req.body, req.auth!) });
+  res.status(201).json({ data: await service.addDocument(String(req.params.id), createCarDocumentSchema.parse(req.body), req.file, req.auth!) });
+});
+
+export const downloadDocument: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const { document, stream } = await service.getDocumentDownload(String(req.params.id), req.auth!);
+  res.setHeader("Content-Type", document.mimeType ?? "application/octet-stream");
+  res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(document.fileName)}"`);
+  stream.pipe(res);
 });
 
 export const deleteDocument: RequestHandler = asyncHandler(async (req: Request, res: Response) => {

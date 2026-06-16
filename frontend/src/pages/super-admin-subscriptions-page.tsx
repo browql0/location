@@ -7,6 +7,7 @@ import { AppSection } from "@/components/ui-custom/app-section";
 import { DataTable } from "@/components/ui-custom/data-table";
 import { PageContainer } from "@/components/ui-custom/page-container";
 import { StatusBadge } from "@/components/ui-custom/status-badge";
+import { generateSaasInvoice } from "@/features/invoices/invoices-api";
 import { changeSubscriptionPlan, listPlans, listSubscriptions, setSubscriptionActive, type Subscription, type SubscriptionPlan } from "@/features/saas/saas-api";
 import { getApiErrorMessage } from "@/lib/api-error";
 
@@ -41,7 +42,7 @@ export function SuperAdminSubscriptionsPage() {
         id: "actions",
         header: "Actions",
         cell: ({ row }) => (
-          <div className="flex min-w-72 gap-2">
+          <div className="flex min-w-72 flex-wrap gap-2">
             <select
               className="h-9 rounded-md border bg-background px-2 text-sm"
               aria-label="Changer plan"
@@ -78,6 +79,20 @@ export function SuperAdminSubscriptionsPage() {
               }}
             >
               {row.original.status === "SUSPENDED" ? "Reactiver" : "Suspendre"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={async () => {
+                try {
+                  const invoice = await generateSaasInvoice(row.original.id);
+                  toast.success("Facture SaaS generee", { description: invoice.invoiceNumber });
+                } catch (error) {
+                  toast.error("Generation impossible", { description: getApiErrorMessage(error) });
+                }
+              }}
+            >
+              Facture SaaS
             </Button>
           </div>
         )

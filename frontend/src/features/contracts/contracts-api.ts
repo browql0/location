@@ -6,9 +6,13 @@ export type Contract = {
   agencyId: string;
   reservationId: string;
   contractNumber: string;
+  status: "GENERATED" | "SIGNED" | "ARCHIVED" | "CANCELLED";
   generatedAt: string;
-  pdfPath: string | null;
+  pdfStorageKey: string | null;
+  signedByClient: boolean;
+  signedByAgency: boolean;
   signedAt: string | null;
+  archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
   agency: { id: string; name: string; email: string; phone: string | null; address: string | null; city?: string | null };
@@ -63,4 +67,24 @@ export async function downloadContractPdf(id: string, contractNumber: string) {
   link.click();
   link.remove();
   window.URL.revokeObjectURL(url);
+}
+
+export async function signContractClient(id: string) {
+  const response = await api.patch<ApiItem<Contract>>(`/contracts/${id}/sign-client`);
+  return response.data.data;
+}
+
+export async function signContractAgency(id: string) {
+  const response = await api.patch<ApiItem<Contract>>(`/contracts/${id}/sign-agency`);
+  return response.data.data;
+}
+
+export async function archiveContract(id: string) {
+  const response = await api.patch<ApiItem<Contract>>(`/contracts/${id}/archive`);
+  return response.data.data;
+}
+
+export async function cancelContract(id: string) {
+  const response = await api.patch<ApiItem<Contract>>(`/contracts/${id}/cancel`);
+  return response.data.data;
 }

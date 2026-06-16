@@ -1,6 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
+import { uploadRateLimit } from "../../middlewares/rate-limit.middleware.js";
 import { requireActiveSubscription } from "../../middlewares/subscription.middleware.js";
 import { validateBody } from "../../middlewares/validate.middleware.js";
 import { AppError } from "../../shared/errors/app-error.js";
@@ -34,4 +35,4 @@ clientRouter.get("/:id", controller.getClient);
 clientRouter.patch("/:id", validateBody(updateClientSchema), controller.updateClient);
 clientRouter.delete("/:id", controller.deleteClient);
 clientRouter.get("/:id/documents", controller.listDocuments);
-clientRouter.post("/:id/documents", upload.single("file"), controller.addDocument);
+clientRouter.post("/:id/documents", uploadRateLimit, upload.single("file"), controller.addDocument);

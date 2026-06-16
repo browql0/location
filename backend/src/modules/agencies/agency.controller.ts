@@ -21,10 +21,22 @@ export const updateAgency: RequestHandler = asyncHandler(async (req: Request, re
   res.json({ data: await service.updateAgency(String(req.params.id), req.body, req.auth!, requestMeta(req)) });
 });
 
+export const updateCompany: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  res.json({ data: await service.updateCompany(String(req.params.id), req.body, req.auth!, requestMeta(req)) });
+});
+
+export const uploadLogo: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  res.json({ data: await service.uploadLogo(String(req.params.id), req.file, req.auth!, requestMeta(req)) });
+});
+
 export const enableAgency: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
   res.json({ data: await service.setAgencyStatus(String(req.params.id), AgencyStatus.ACTIVE, req.auth!, requestMeta(req)) });
 });
 
 export const disableAgency: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
   res.json({ data: await service.setAgencyStatus(String(req.params.id), AgencyStatus.SUSPENDED, req.auth!, requestMeta(req)) });
+});
+
+export const deleteAgency: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  res.json({ data: await service.deleteAgency(String(req.params.id), req.auth!, requestMeta(req)) });
 });

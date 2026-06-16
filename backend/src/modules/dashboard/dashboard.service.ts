@@ -1,4 +1,4 @@
-import { AgencyStatus, AuditAction, BillingInterval, CarStatus, IncidentStatus, PaymentStatus, ReservationStatus, SubscriptionStatus, UserRole } from "@prisma/client";
+import { AgencyStatus, AuditAction, BillingInterval, CarStatus, IncidentStatus, InvoiceStatus, InvoiceType, MaintenanceStatus, PaymentStatus, ReservationStatus, SubscriptionStatus, UserRole, VehicleAnomalySeverity, VehicleAnomalyType } from "@prisma/client";
 import { prisma } from "../../prisma/prisma.service.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import type { AuthContext } from "../../shared/types/auth.js";
@@ -244,6 +244,18 @@ export async function getSuperAdminDashboard(rangeInput = "30d") {
   const mrr = activeSubscriptions.reduce((sum, subscription) => sum + normalizeMonthlyAmount(subscription.amount, subscription.billingInterval), 0);
   const arr = mrr * 12;
   const revenueSaas = activeSubscriptions.reduce((sum, subscription) => sum + Number(subscription.amount ?? 0), 0);
+  const [saasInvoicesIssued, saasInvoiceSums, agenciesWithUnpaidSaasInvoice] = await Promise.all([
+    prisma.invoice.count({ where: { type: InvoiceType.SAAS_INVOICE, status: { not: InvoiceStatus.CANCELLED } } }),
+    prisma.invoice.aggregate({
+      where: { type: InvoiceType.SAAS_INVOICE, status: { not: InvoiceStatus.CANCELLED } },
+      _sum: { totalAmount: true, paidAmount: true }
+    }),
+    prisma.invoice.findMany({
+      where: { type: InvoiceType.SAAS_INVOICE, status: { in: [InvoiceStatus.ISSUED, InvoiceStatus.SENT, InvoiceStatus.PARTIAL] }, remainingAmount: { gt: 0 } },
+      distinct: ["agencyId"],
+      select: { agencyId: true }
+    })
+  ]);
   const monthlyGrowth = percentChange(currentMonthAgencies, previousMonthAgencies);
   const conversionRate = ratioPercent(completedSubscriptions, completedSubscriptions + trialRows.length);
   const churnRate = ratioPercent(suspendedAgencies, Math.max(totalAgencies, 1));
@@ -401,6 +413,10 @@ export async function getSuperAdminDashboard(rangeInput = "30d") {
       mrr,
       arr,
       revenueSaas,
+      saasInvoicesIssued,
+      saasRevenueInvoiced: Number(saasInvoiceSums._sum.totalAmount ?? 0),
+      saasRevenuePaid: Number(saasInvoiceSums._sum.paidAmount ?? 0),
+      agenciesWithUnpaidSaasInvoice: agenciesWithUnpaidSaasInvoice.length,
       totalVehicles,
       totalClients,
       totalReservations,
@@ -547,7 +563,13 @@ export async function getAgencyDashboard(auth: AuthContext) {
     maintenanceAlerts,
     monthlyRevenueRows,
     occupancyRows,
-    topVehicleRows
+    topVehicleRows,
+    vehiclesNeedingMaintenance,
+    overdueOilChanges,
+    plannedMaintenanceCount,
+    criticalAnomalies,
+    expiredInsurances,
+    expiredTechnicalInspections
   ] = await Promise.all([
     prisma.car.count({ where: { agencyId, deletedAt: null, status: { not: CarStatus.INACTIVE } } }),
     prisma.car.count({ where: { agencyId, deletedAt: null, status: CarStatus.AVAILABLE } }),
@@ -585,7 +607,13 @@ export async function getAgencyDashboard(auth: AuthContext) {
       _sum: { totalAmount: true },
       orderBy: { _sum: { totalAmount: "desc" } },
       take: 5
-    })
+    }),
+    prisma.car.count({ where: { agencyId, deletedAt: null, nextMaintenanceKm: { not: null }, currentMileage: { gt: prisma.car.fields.nextMaintenanceKm } } }),
+    prisma.car.count({ where: { agencyId, deletedAt: null, nextOilChangeKm: { not: null }, currentMileage: { gt: prisma.car.fields.nextOilChangeKm } } }),
+    prisma.maintenanceRecord.count({ where: { agencyId, deletedAt: null, status: MaintenanceStatus.PLANNED } }),
+    prisma.vehicleAnomaly.count({ where: { agencyId, resolved: false, severity: VehicleAnomalySeverity.CRITICAL } }),
+    prisma.vehicleAnomaly.count({ where: { agencyId, resolved: false, type: VehicleAnomalyType.INSURANCE_EXPIRED } }),
+    prisma.vehicleAnomaly.count({ where: { agencyId, resolved: false, type: VehicleAnomalyType.TECHNICAL_INSPECTION_EXPIRED } })
   ]);
 
   const cars = await prisma.car.findMany({
@@ -595,6 +623,13 @@ export async function getAgencyDashboard(auth: AuthContext) {
   const carsById = new Map(cars.map((car) => [car.id, car]));
   const revenueMonth = revenueMonthRows.reduce((sum, reservation) => sum + Number(reservation.totalAmount), 0);
   const revenueYear = revenueYearRows.reduce((sum, reservation) => sum + Number(reservation.totalAmount), 0);
+  const [rentalInvoicesIssued, rentalInvoiceSums] = await Promise.all([
+    prisma.invoice.count({ where: { agencyId, type: InvoiceType.RENTAL_INVOICE, status: { not: InvoiceStatus.CANCELLED } } }),
+    prisma.invoice.aggregate({
+      where: { agencyId, type: InvoiceType.RENTAL_INVOICE, status: { not: InvoiceStatus.CANCELLED } },
+      _sum: { totalAmount: true, paidAmount: true, remainingAmount: true }
+    })
+  ]);
   const occupancyRate = vehicles > 0 ? Math.round((rented / vehicles) * 100) : 0;
 
   const monthlyRevenue = new Map<string, number>();
@@ -624,6 +659,16 @@ export async function getAgencyDashboard(auth: AuthContext) {
       reservationsMonth,
       revenueMonth,
       revenueYear,
+      rentalInvoicesIssued,
+      rentalAmountInvoiced: Number(rentalInvoiceSums._sum.totalAmount ?? 0),
+      rentalAmountPaid: Number(rentalInvoiceSums._sum.paidAmount ?? 0),
+      rentalAmountRemaining: Number(rentalInvoiceSums._sum.remainingAmount ?? 0),
+      vehiclesNeedingMaintenance,
+      overdueOilChanges,
+      plannedMaintenance: plannedMaintenanceCount,
+      criticalAnomalies,
+      expiredTechnicalInspections,
+      expiredInsurances,
       activeClients,
       fleetOccupancyRate: occupancyRate
     },

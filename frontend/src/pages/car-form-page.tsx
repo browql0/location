@@ -24,7 +24,14 @@ const initialForm: CarPayload = {
   dailyPrice: 0,
   weeklyPrice: 0,
   monthlyPrice: 0,
+  defaultDeposit: 0,
   mileage: 0,
+  currentMileage: 0,
+  nextOilChangeKm: null,
+  nextTireChangeKm: null,
+  nextBrakeCheckKm: null,
+  nextInspectionKm: null,
+  nextMaintenanceKm: null,
   insuranceExpiryDate: "",
   technicalVisitExpiryDate: "",
   notes: ""
@@ -114,7 +121,14 @@ export function CarFormPage() {
             <Input min={0} step="0.01" type="number" placeholder="Prix/jour" value={form.dailyPrice} onChange={(event) => setForm({ ...form, dailyPrice: asNumber(event.target.value) })} />
             <Input min={0} step="0.01" type="number" placeholder="Prix/semaine" value={form.weeklyPrice} onChange={(event) => setForm({ ...form, weeklyPrice: asNumber(event.target.value) })} />
             <Input min={0} step="0.01" type="number" placeholder="Prix/mois" value={form.monthlyPrice} onChange={(event) => setForm({ ...form, monthlyPrice: asNumber(event.target.value) })} />
+            <Input min={0} step="0.01" type="number" placeholder="Caution par defaut" value={form.defaultDeposit} onChange={(event) => setForm({ ...form, defaultDeposit: asNumber(event.target.value) })} />
             <Input min={0} type="number" placeholder="Kilometrage" value={form.mileage} onChange={(event) => setForm({ ...form, mileage: asNumber(event.target.value) })} />
+            <Input min={0} type="number" placeholder="Kilometrage actuel" value={form.currentMileage ?? 0} onChange={(event) => setForm({ ...form, currentMileage: asNumber(event.target.value) })} />
+            <Input min={0} type="number" placeholder="Prochaine vidange km" value={form.nextOilChangeKm ?? ""} onChange={(event) => setForm({ ...form, nextOilChangeKm: event.target.value ? asNumber(event.target.value) : null })} />
+            <Input min={0} type="number" placeholder="Prochains pneus km" value={form.nextTireChangeKm ?? ""} onChange={(event) => setForm({ ...form, nextTireChangeKm: event.target.value ? asNumber(event.target.value) : null })} />
+            <Input min={0} type="number" placeholder="Controle freins km" value={form.nextBrakeCheckKm ?? ""} onChange={(event) => setForm({ ...form, nextBrakeCheckKm: event.target.value ? asNumber(event.target.value) : null })} />
+            <Input min={0} type="number" placeholder="Visite technique km" value={form.nextInspectionKm ?? ""} onChange={(event) => setForm({ ...form, nextInspectionKm: event.target.value ? asNumber(event.target.value) : null })} />
+            <Input min={0} type="number" placeholder="Prochain entretien km" value={form.nextMaintenanceKm ?? ""} onChange={(event) => setForm({ ...form, nextMaintenanceKm: event.target.value ? asNumber(event.target.value) : null })} />
             <Input type="date" value={form.insuranceExpiryDate ?? ""} onChange={(event) => setForm({ ...form, insuranceExpiryDate: event.target.value })} />
             <Input type="date" value={form.technicalVisitExpiryDate ?? ""} onChange={(event) => setForm({ ...form, technicalVisitExpiryDate: event.target.value })} />
           </div>

@@ -17,7 +17,6 @@ export type ClientDocument = {
   mimeType: string;
   size: number;
   storageKey: string;
-  fileUrl: string | null;
   createdAt: string;
 };
 

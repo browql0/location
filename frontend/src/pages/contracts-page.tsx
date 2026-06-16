@@ -47,14 +47,14 @@ export function ContractsPage() {
       { header: "Genere le", cell: ({ row }) => date(row.original.generatedAt) },
       { header: "Montant", cell: ({ row }) => money(row.original.reservation.totalAmount) },
       { header: "Paiement", cell: ({ row }) => <StatusBadge status={row.original.reservation.paymentStatus} /> },
-      { header: "PDF", cell: ({ row }) => <StatusBadge status={row.original.pdfPath ? "ACTIVE" : "PENDING"} /> },
+      { header: "Statut", cell: ({ row }) => <StatusBadge status={row.original.status} /> },
       {
         id: "actions",
         header: "Actions",
         cell: ({ row }) => (
           <div className="flex min-w-48 flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={() => navigate(`/contracts/${row.original.id}`)}><Eye className="mr-2 h-4 w-4" /> Voir</Button>
-            <Button type="button" variant="outline" disabled={!row.original.pdfPath} onClick={() => downloadContractPdf(row.original.id, row.original.contractNumber)}>
+            <Button type="button" variant="outline" disabled={!row.original.pdfStorageKey} onClick={() => downloadContractPdf(row.original.id, row.original.contractNumber)}>
               <Download className="mr-2 h-4 w-4" /> PDF
             </Button>
           </div>

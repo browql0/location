@@ -74,10 +74,14 @@ export function VehicleAssetCard({ car, photoUrl }: VehicleAssetCardProps) {
         
         <div className="mb-4 text-xs text-muted-foreground">{car.year} • {car.mileage.toLocaleString("fr-FR")} km</div>
         
-        <div className="mt-auto grid grid-cols-2 gap-2 border-t border-border/50 pt-4">
+        <div className="mt-auto grid grid-cols-3 gap-2 border-t border-border/50 pt-4">
           <div>
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Price/Day</div>
             <div className="text-sm font-bold text-foreground">{Number(car.dailyPrice).toLocaleString("fr-FR")} MAD</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Caution</div>
+            <div className="text-sm font-bold text-foreground">{Number(car.defaultDeposit).toLocaleString("fr-FR")} MAD</div>
           </div>
           <div>
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Insurance</div>

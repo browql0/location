@@ -28,7 +28,8 @@ export type Reservation = {
   cancelledAt: string | null;
   client: { id: string; firstName: string; lastName: string; phone: string | null; email: string | null };
   car: { id: string; brand: string; model: string; registrationNumber: string; status: string; dailyPrice: string };
-  contract?: { id: string; contractNumber: string; generatedAt: string; pdfPath: string | null; signedAt: string | null } | null;
+  contract?: { id: string; contractNumber: string; generatedAt: string; pdfStorageKey: string | null; status: string; signedAt: string | null } | null;
+  invoices?: { id: string; invoiceNumber: string; status: string; issuedAt: string; pdfStorageKey: string | null; sentToClientAt: string | null }[];
   createdAt: string;
   updatedAt: string;
 };

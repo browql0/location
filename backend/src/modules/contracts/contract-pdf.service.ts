@@ -1,14 +1,9 @@
-import { createWriteStream } from "node:fs";
-import { mkdir } from "node:fs/promises";
-import path from "node:path";
+import { PassThrough } from "node:stream";
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import type { Prisma } from "@prisma/client";
 import { env } from "../../config/env.js";
 import { FileStorageService } from "../files/file-storage.service.js";
-
-export const backendRoot = path.basename(process.cwd()) === "backend" ? process.cwd() : path.resolve(process.cwd(), "backend");
-const contractUploadRoot = path.resolve(backendRoot, "uploads", "contracts");
 
 type ContractPdfData = Prisma.ContractGetPayload<{
   include: {
@@ -106,10 +101,6 @@ async function getPrimaryCarPhoto(contract: ContractPdfData) {
   }
 }
 
-function contractStorageKey(contract: ContractPdfData) {
-  return `${contract.agencyId}/${contract.id}/${contract.contractNumber}.pdf`;
-}
-
 function addFooter(doc: PDFKit.PDFDocument, contract: ContractPdfData) {
   const range = doc.bufferedPageRange();
   for (let i = range.start; i < range.start + range.count; i += 1) {
@@ -121,24 +112,15 @@ function addFooter(doc: PDFKit.PDFDocument, contract: ContractPdfData) {
   }
 }
 
-export function resolveContractPdfPath(pdfPath: string) {
-  if (pdfPath.includes("..") || path.isAbsolute(pdfPath)) throw new Error("Invalid contract pdf path");
-  const fullPath = path.resolve(contractUploadRoot, pdfPath);
-  if (!fullPath.startsWith(`${contractUploadRoot}${path.sep}`)) throw new Error("Invalid contract pdf path");
-  return fullPath;
-}
-
 export async function generateContractPdf(contract: ContractPdfData) {
-  const storageKey = contractStorageKey(contract);
-  const fullPath = resolveContractPdfPath(storageKey);
-  await mkdir(path.dirname(fullPath), { recursive: true });
-
   const doc = new PDFDocument({ size: "A4", margin: 36, bufferPages: true, compress: false, info: { Title: `Contrat ${contract.contractNumber}` } });
-  const output = createWriteStream(fullPath);
+  const output = new PassThrough();
+  const pdfBufferPromise = streamToBuffer(output);
   doc.pipe(output);
 
   const reservation = contract.reservation;
   const agency = contract.agency;
+  const agencyDisplayName = clean(agency.tradeName ?? agency.name);
   const client = reservation.client;
   const car = reservation.car;
   const digitalUrl = contractUrl(contract.id);
@@ -148,10 +130,10 @@ export async function generateContractPdf(contract: ContractPdfData) {
 
   doc.rect(0, 0, 595, 92).fill(colors.graphite);
   doc.roundedRect(36, 22, 46, 46, 6).fill("#ffffff");
-  doc.fillColor(colors.graphite).font("Helvetica-Bold").fontSize(14).text((agency.name || "AG").slice(0, 2).toUpperCase(), 48, 38);
-  doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(15).text(clean(agency.name), 94, 20, { width: 250 });
+  doc.fillColor(colors.graphite).font("Helvetica-Bold").fontSize(14).text(agencyDisplayName.slice(0, 2).toUpperCase(), 48, 38);
+  doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(15).text(agencyDisplayName, 94, 20, { width: 250 });
   doc.fillColor("#d8dde3").font("Helvetica").fontSize(7.6).text([agency.phone, agency.email, agency.address, agency.city].filter(Boolean).join("  |  ") || "-", 94, 40, { width: 280, height: 24 });
-  doc.fillColor("#d8dde3").fontSize(7).text("ICE: -   RC: -   IF: -", 94, 66, { width: 250 });
+  doc.fillColor("#d8dde3").fontSize(7).text(`ICE: ${clean(agency.ice)}   RC: ${clean(agency.rc)}   IF: ${clean(agency.ifNumber)}`, 94, 66, { width: 250 });
 
   doc.roundedRect(395, 18, 160, 54, 5).strokeColor("#69727d").lineWidth(0.8).stroke();
   doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(9).text("CONTRAT DE LOCATION", 407, 26, { width: 136, align: "right" });
@@ -232,7 +214,7 @@ export async function generateContractPdf(contract: ContractPdfData) {
   box(doc, 46, 604, 150, 86);
   box(doc, 214, 604, 150, 86);
   doc.fillColor(colors.ink).font("Helvetica-Bold").fontSize(8).text("Agence", 54, 612, { width: 134 });
-  doc.font("Helvetica").fontSize(7).fillColor(colors.muted).text(`Nom: ${clean(agency.name)}`, 54, 630, { width: 134 });
+  doc.font("Helvetica").fontSize(7).fillColor(colors.muted).text(`Nom: ${agencyDisplayName}`, 54, 630, { width: 134 });
   doc.text("Date signature: -", 54, 646, { width: 134 });
   doc.text("Signature et cachet", 54, 672, { width: 134, align: "center" });
   doc.fillColor(colors.ink).font("Helvetica-Bold").fontSize(8).text("Client", 222, 612, { width: 134 });
@@ -249,10 +231,14 @@ export async function generateContractPdf(contract: ContractPdfData) {
   addFooter(doc, contract);
   doc.end();
 
-  await new Promise<void>((resolve, reject) => {
-    output.on("finish", resolve);
-    output.on("error", reject);
+  const pdfBuffer = await pdfBufferPromise;
+  const saved = await FileStorageService.saveBuffer(pdfBuffer, {
+    agencyId: contract.agencyId,
+    folder: "contracts",
+    entityId: contract.id,
+    fileName: `${contract.contractNumber}.pdf`,
+    mimeType: "application/pdf"
   });
 
-  return storageKey;
+  return saved.storageKey;
 }

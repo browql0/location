@@ -1,9 +1,9 @@
 import { useEffect, useState, useMemo } from "react";
 import { toast } from "sonner";
-import { Search, Building2, Mail, MapPin, Phone, Car, Users, Calendar, ShieldAlert, X, Loader2, CheckCircle2, Zap } from "lucide-react";
+import { Search, Building2, Mail, MapPin, Phone, Car, Users, Calendar, ShieldAlert, X, Loader2, CheckCircle2, Zap, Trash2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-import { listAgencies, setAgencyEnabled, type Agency } from "@/features/saas/saas-api";
+import { deleteAgency, listAgencies, setAgencyEnabled, type Agency } from "@/features/saas/saas-api";
 import { getApiErrorMessage } from "@/lib/api-error";
 
 import { C, fadeUp, stagger, fDate } from "@/components/super-admin-dashboard/tokens";
@@ -21,11 +21,13 @@ function AgencyDetailPanel({
   agency,
   onClose,
   onToggleStatus,
+  onDelete,
   isToggling
 }: {
   agency: Agency;
   onClose: () => void;
   onToggleStatus: () => void;
+  onDelete: () => void;
   isToggling: boolean;
 }) {
   const isSuspended = agency.status === "SUSPENDED";
@@ -174,6 +176,15 @@ function AgencyDetailPanel({
               La suspension bloquera immédiatement l'accès à tous les utilisateurs de cette agence.
             </p>
           )}
+          <button
+            disabled={isToggling}
+            onClick={onDelete}
+            className="mt-4 w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold transition-all duration-200 disabled:opacity-50"
+            style={{ background: "transparent", color: C.danger, border: `1px solid ${C.danger}50` }}
+          >
+            <Trash2 className="h-5 w-5" />
+            Supprimer l'agence
+          </button>
         </div>
       </motion.div>
     </>
@@ -225,6 +236,22 @@ export function SuperAdminAgenciesPage() {
       setSelectedAgency({ ...selectedAgency, status: newStatus });
     } catch (error) {
       toast.error("Action impossible", { description: getApiErrorMessage(error) });
+    } finally {
+      setIsToggling(false);
+    }
+  }
+
+  async function handleDeleteAgency() {
+    if (!selectedAgency) return;
+    if (!window.confirm(`Supprimer l'agence ${selectedAgency.name} ?`)) return;
+    setIsToggling(true);
+    try {
+      await deleteAgency(selectedAgency.id);
+      toast.success("Agence supprimee");
+      setAgencies((current) => current.filter((agency) => agency.id !== selectedAgency.id));
+      setSelectedAgency(null);
+    } catch (error) {
+      toast.error("Suppression impossible", { description: getApiErrorMessage(error) });
     } finally {
       setIsToggling(false);
     }
@@ -390,6 +417,7 @@ export function SuperAdminAgenciesPage() {
             agency={selectedAgency}
             onClose={() => setSelectedAgency(null)}
             onToggleStatus={handleToggleStatus}
+            onDelete={handleDeleteAgency}
             isToggling={isToggling}
           />
         )}

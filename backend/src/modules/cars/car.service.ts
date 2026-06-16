@@ -122,7 +122,14 @@ export async function createCar(input: CreateCarInput, auth: AuthContext, meta: 
       dailyPrice: input.dailyPrice,
       weeklyPrice: input.weeklyPrice,
       monthlyPrice: input.monthlyPrice,
+      defaultDeposit: input.defaultDeposit,
       mileage: input.mileage,
+      currentMileage: input.currentMileage ?? input.mileage,
+      nextOilChangeKm: input.nextOilChangeKm ?? null,
+      nextTireChangeKm: input.nextTireChangeKm ?? null,
+      nextBrakeCheckKm: input.nextBrakeCheckKm ?? null,
+      nextInspectionKm: input.nextInspectionKm ?? null,
+      nextMaintenanceKm: input.nextMaintenanceKm ?? null,
       status: input.status,
       insuranceExpiryDate: input.insuranceExpiryDate,
       technicalVisitExpiryDate: input.technicalVisitExpiryDate,
@@ -168,7 +175,14 @@ export async function updateCar(id: string, input: UpdateCarInput, auth: AuthCon
       dailyPrice: input.dailyPrice,
       weeklyPrice: input.weeklyPrice,
       monthlyPrice: input.monthlyPrice,
+      defaultDeposit: input.defaultDeposit,
       mileage: input.mileage,
+      currentMileage: input.currentMileage,
+      nextOilChangeKm: input.nextOilChangeKm === undefined ? undefined : input.nextOilChangeKm ?? null,
+      nextTireChangeKm: input.nextTireChangeKm === undefined ? undefined : input.nextTireChangeKm ?? null,
+      nextBrakeCheckKm: input.nextBrakeCheckKm === undefined ? undefined : input.nextBrakeCheckKm ?? null,
+      nextInspectionKm: input.nextInspectionKm === undefined ? undefined : input.nextInspectionKm ?? null,
+      nextMaintenanceKm: input.nextMaintenanceKm === undefined ? undefined : input.nextMaintenanceKm ?? null,
       status: input.status,
       insuranceExpiryDate: input.insuranceExpiryDate,
       technicalVisitExpiryDate: input.technicalVisitExpiryDate,
@@ -186,6 +200,23 @@ export async function updateCar(id: string, input: UpdateCarInput, auth: AuthCon
     metadata: { event: "car_updated", carId: id, registrationNumber: updated.registrationNumber },
     ...meta
   });
+  if (input.defaultDeposit !== undefined && Number(input.defaultDeposit) !== Number(current.defaultDeposit)) {
+    await createAuditLog({
+      action: AuditAction.UPDATE,
+      entity: "Car",
+      entityId: id,
+      userId: auth.userId,
+      agencyId: updated.agencyId,
+      metadata: {
+        event: "car_default_deposit_updated",
+        carId: id,
+        registrationNumber: updated.registrationNumber,
+        oldDefaultDeposit: Number(current.defaultDeposit),
+        newDefaultDeposit: Number(updated.defaultDeposit)
+      },
+      ...meta
+    });
+  }
   return updated;
 }
 
@@ -253,7 +284,7 @@ export async function addPhoto(carId: string, file: Express.Multer.File | undefi
   const photo = await prisma.carPhoto.create({
     data: {
       carId,
-      url: saved.fileUrl ?? "",
+      url: "",
       fileName: file.originalname,
       mimeType: file.mimetype,
       size: file.size,
@@ -308,16 +339,44 @@ export async function listDocuments(carId: string, auth: AuthContext) {
   return prisma.carDocument.findMany({ where: { carId }, orderBy: { createdAt: "desc" } });
 }
 
-export async function addDocument(carId: string, input: CreateCarDocumentInput, auth: AuthContext) {
+async function getScopedDocument(id: string, auth: AuthContext) {
+  const document = await prisma.carDocument.findUnique({ where: { id }, include: { car: true } });
+  if (!document || document.car.deletedAt) throw new AppError("Car document not found", 404, "CAR_DOCUMENT_NOT_FOUND");
+  await getScopedCar(document.carId, auth);
+  return document;
+}
+
+export async function addDocument(carId: string, input: CreateCarDocumentInput, file: Express.Multer.File | undefined, auth: AuthContext) {
   assertPermission(auth, "cars:update");
-  await getScopedCar(carId, auth);
-  return prisma.carDocument.create({ data: { carId, type: input.type, fileName: input.fileName, fileUrl: input.fileUrl } });
+  const car = await getScopedCar(carId, auth);
+  if (!file) throw new AppError("Document file is required", 400, "CAR_DOCUMENT_FILE_REQUIRED");
+  const saved = await FileStorageService.saveFile(file, { agencyId: car.agencyId, carId });
+  return prisma.carDocument.create({
+    data: {
+      carId,
+      type: input.type,
+      fileName: file.originalname,
+      mimeType: file.mimetype,
+      size: file.size,
+      storageKey: saved.storageKey
+    }
+  });
+}
+
+export async function getDocumentDownload(id: string, auth: AuthContext) {
+  assertPermission(auth, "cars:read");
+  const document = await getScopedDocument(id, auth);
+  return { document, stream: await FileStorageService.getFileStream(document.storageKey) };
 }
 
 export async function deleteDocument(id: string, auth: AuthContext) {
   assertPermission(auth, "cars:update");
-  const document = await prisma.carDocument.findUnique({ where: { id }, include: { car: true } });
-  if (!document || document.car.deletedAt) throw new AppError("Car document not found", 404, "CAR_DOCUMENT_NOT_FOUND");
-  await getScopedCar(document.carId, auth);
-  return prisma.carDocument.delete({ where: { id } });
+  const document = await getScopedDocument(id, auth);
+  const deleted = await prisma.carDocument.delete({ where: { id } });
+  try {
+    await FileStorageService.deleteFile(document.storageKey);
+  } catch (error) {
+    console.warn("Car document file deletion failed:", error);
+  }
+  return deleted;
 }

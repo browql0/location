@@ -1,12 +1,11 @@
-import { AuditAction, CarStatus, ReservationStatus, UserRole } from "@prisma/client";
-import { createReadStream } from "node:fs";
-import { access } from "node:fs/promises";
+import { AuditAction, CarStatus, ContractStatus, ReservationStatus, UserRole } from "@prisma/client";
 import { prisma } from "../../prisma/prisma.service.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import type { AuthContext } from "../../shared/types/auth.js";
 import type { Permission } from "../../shared/utils/permissions.js";
 import { createAuditLog } from "../audit/audit.service.js";
-import { generateContractPdf, resolveContractPdfPath } from "./contract-pdf.service.js";
+import { FileStorageService } from "../files/file-storage.service.js";
+import { generateContractPdf } from "./contract-pdf.service.js";
 import type { ContractQueryInput } from "./contract.schemas.js";
 
 type RequestMeta = { ipAddress?: string; userAgent?: string };
@@ -34,7 +33,7 @@ function agencyScope(auth: AuthContext, requestedAgencyId?: string | null) {
 }
 
 async function nextContractNumber(agencyId: string, year: number) {
-  const prefix = `LOC-${year}-`;
+  const prefix = `CTR-${year}-`;
   const latest = await prisma.contract.findFirst({
     where: { agencyId, contractNumber: { startsWith: prefix } },
     orderBy: { contractNumber: "desc" },
@@ -94,7 +93,7 @@ export async function generateContract(reservationId: string, auth: AuthContext,
     }
   });
   if (!reservation) throw new AppError("Reservation not found", 404, "RESERVATION_NOT_FOUND");
-  if (reservation.contract) throw new AppError("A contract already exists for this reservation", 409, "CONTRACT_ALREADY_EXISTS");
+  if (reservation.contract && reservation.contract.status !== ContractStatus.ARCHIVED && reservation.contract.status !== ContractStatus.CANCELLED) throw new AppError("A contract already exists for this reservation", 409, "CONTRACT_ALREADY_EXISTS");
   if (reservation.status === ReservationStatus.CANCELLED) throw new AppError("Cancelled reservations cannot have contracts", 409, "RESERVATION_CANCELLED");
   if (reservation.car.status === CarStatus.INACTIVE || reservation.car.deletedAt) throw new AppError("Inactive cars cannot have contracts", 409, "CAR_INACTIVE");
   if (reservation.client.deletedAt) throw new AppError("Deleted clients cannot have contracts", 409, "CLIENT_DELETED");
@@ -105,13 +104,14 @@ export async function generateContract(reservationId: string, auth: AuthContext,
       agencyId: reservation.agencyId,
       reservationId: reservation.id,
       contractNumber: await nextContractNumber(reservation.agencyId, now.getFullYear()),
-      generatedAt: now
+      generatedAt: now,
+      status: ContractStatus.GENERATED
     },
     include: contractInclude
   });
 
-  const pdfPath = await generateContractPdf(contract);
-  const updated = await prisma.contract.update({ where: { id: contract.id }, data: { pdfPath }, include: contractInclude });
+  const pdfStorageKey = await generateContractPdf(contract);
+  const updated = await prisma.contract.update({ where: { id: contract.id }, data: { pdfStorageKey }, include: contractInclude });
   await createAuditLog({
     action: AuditAction.CREATE,
     entity: "Contract",
@@ -127,27 +127,71 @@ export async function generateContract(reservationId: string, auth: AuthContext,
 export async function downloadContract(id: string, auth: AuthContext, meta: RequestMeta) {
   assertPermission(auth, "contracts:read");
   const contract = await getScopedContract(id, auth);
-  if (!contract.pdfPath) throw new AppError("Contract PDF is not available", 404, "CONTRACT_PDF_NOT_FOUND");
-  const filePath = resolveContractPdfPath(contract.pdfPath);
+  if (!contract.pdfStorageKey) throw new AppError("Contract PDF is not available", 404, "CONTRACT_PDF_NOT_FOUND");
   try {
-    await access(filePath);
+    const stream = await FileStorageService.getFileStream(contract.pdfStorageKey);
+    await createAuditLog({
+      action: AuditAction.DOWNLOAD,
+      entity: "Contract",
+      entityId: contract.id,
+      userId: auth.userId,
+      agencyId: contract.agencyId,
+      metadata: { event: "contract_downloaded", contractNumber: contract.contractNumber },
+      ...meta
+    });
+    return {
+      contract,
+      fileName: `${contract.contractNumber}.pdf`,
+      stream,
+      contentType: "application/pdf"
+    };
   } catch {
     throw new AppError("Contract PDF is not available", 404, "CONTRACT_PDF_NOT_FOUND");
   }
-  await createAuditLog({
-    action: AuditAction.DOWNLOAD,
-    entity: "Contract",
-    entityId: contract.id,
-    userId: auth.userId,
-    agencyId: contract.agencyId,
-    metadata: { event: "contract_downloaded", contractNumber: contract.contractNumber },
-    ...meta
+}
+
+export async function signClient(id: string, auth: AuthContext, meta: RequestMeta) {
+  assertPermission(auth, "contracts:update");
+  const contract = await getScopedContract(id, auth);
+  if (contract.status === ContractStatus.ARCHIVED || contract.status === ContractStatus.CANCELLED) throw new AppError("Contract cannot be signed", 409, "CONTRACT_NOT_SIGNABLE");
+  const signedByAgency = contract.signedByAgency;
+  const signedAt = signedByAgency ? new Date() : contract.signedAt;
+  const updated = await prisma.contract.update({
+    where: { id },
+    data: { signedByClient: true, signedAt, status: signedByAgency ? ContractStatus.SIGNED : contract.status },
+    include: contractInclude
   });
-  return {
-    contract,
-    fileName: `${contract.contractNumber}.pdf`,
-    filePath,
-    stream: createReadStream(filePath),
-    contentType: "application/pdf"
-  };
+  await createAuditLog({ action: AuditAction.UPDATE, entity: "Contract", entityId: id, userId: auth.userId, agencyId: updated.agencyId, metadata: { event: "contract_signed_client", contractId: id }, ...meta });
+  return updated;
+}
+
+export async function signAgency(id: string, auth: AuthContext, meta: RequestMeta) {
+  assertPermission(auth, "contracts:update");
+  const contract = await getScopedContract(id, auth);
+  if (contract.status === ContractStatus.ARCHIVED || contract.status === ContractStatus.CANCELLED) throw new AppError("Contract cannot be signed", 409, "CONTRACT_NOT_SIGNABLE");
+  const signedByClient = contract.signedByClient;
+  const signedAt = signedByClient ? new Date() : contract.signedAt;
+  const updated = await prisma.contract.update({
+    where: { id },
+    data: { signedByAgency: true, signedAt, status: signedByClient ? ContractStatus.SIGNED : contract.status },
+    include: contractInclude
+  });
+  await createAuditLog({ action: AuditAction.UPDATE, entity: "Contract", entityId: id, userId: auth.userId, agencyId: updated.agencyId, metadata: { event: "contract_signed_agency", contractId: id }, ...meta });
+  return updated;
+}
+
+export async function archiveContract(id: string, auth: AuthContext, meta: RequestMeta) {
+  assertPermission(auth, "contracts:update");
+  const contract = await getScopedContract(id, auth);
+  const updated = await prisma.contract.update({ where: { id }, data: { status: ContractStatus.ARCHIVED, archivedAt: new Date() }, include: contractInclude });
+  await createAuditLog({ action: AuditAction.UPDATE, entity: "Contract", entityId: id, userId: auth.userId, agencyId: contract.agencyId, metadata: { event: "contract_archived", contractId: id }, ...meta });
+  return updated;
+}
+
+export async function cancelContract(id: string, auth: AuthContext, meta: RequestMeta) {
+  assertPermission(auth, "contracts:update");
+  const contract = await getScopedContract(id, auth);
+  const updated = await prisma.contract.update({ where: { id }, data: { status: ContractStatus.CANCELLED }, include: contractInclude });
+  await createAuditLog({ action: AuditAction.UPDATE, entity: "Contract", entityId: id, userId: auth.userId, agencyId: contract.agencyId, metadata: { event: "contract_cancelled", contractId: id }, ...meta });
+  return updated;
 }

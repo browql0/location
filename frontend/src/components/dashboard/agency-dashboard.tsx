@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { AlertTriangle, CalendarClock, Car, FileSignature, Gauge, Users, Wallet } from "lucide-react";
+import { AlertTriangle, CalendarClock, Car, FileSignature, Gauge, Users, Wallet, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { StatCard } from "@/components/ui-custom/stat-card";
 import { getAgencyDashboard, type AgencyDashboardData } from "@/features/saas/saas-api";
@@ -44,6 +44,8 @@ export function AgencyDashboard() {
         <StatCard title="Vehicules disponibles" value={String(kpis?.availableVehicles ?? "-")} icon={Car} />
         <StatCard title="Vehicules loues" value={String(kpis?.rentedVehicles ?? "-")} icon={Car} />
         <StatCard title="Vehicules maintenance" value={String(kpis?.maintenanceVehicles ?? "-")} icon={AlertTriangle} />
+        <StatCard title="Entretien requis" value={String(kpis?.vehiclesNeedingMaintenance ?? "-")} icon={Wrench} />
+        <StatCard title="Vidanges en retard" value={String(kpis?.overdueOilChanges ?? "-")} icon={Gauge} />
         <StatCard title="Reservations du jour" value={String(kpis?.reservationsToday ?? "-")} icon={CalendarClock} />
         <StatCard title="Reservations du mois" value={String(kpis?.reservationsMonth ?? "-")} icon={CalendarClock} />
         <StatCard title="Revenus du mois" value={kpis ? money(kpis.revenueMonth) : "-"} icon={Wallet} />
@@ -57,6 +59,10 @@ export function AgencyDashboard() {
         <StatCard title="Paiements en retard" value={String(alerts?.overduePayments ?? "-")} icon={Wallet} />
         <StatCard title="Documents expires" value={String(alerts?.expiredDocuments ?? "-")} icon={AlertTriangle} />
         <StatCard title="Alertes maintenance" value={String(alerts?.maintenanceAlerts ?? "-")} icon={AlertTriangle} />
+        <StatCard title="Maintenances planifiees" value={String(kpis?.plannedMaintenance ?? "-")} icon={CalendarClock} />
+        <StatCard title="Anomalies critiques" value={String(kpis?.criticalAnomalies ?? "-")} icon={AlertTriangle} />
+        <StatCard title="Visites expirees" value={String(kpis?.expiredTechnicalInspections ?? "-")} icon={AlertTriangle} />
+        <StatCard title="Assurances expirees" value={String(kpis?.expiredInsurances ?? "-")} icon={AlertTriangle} />
         <StatCard title="Reservations a venir" value={String(alerts?.upcomingReservations.length ?? "-")} icon={CalendarClock} />
       </div>
 

@@ -3,6 +3,7 @@ import { prisma } from "../../prisma/prisma.service.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import type { AuthContext } from "../../shared/types/auth.js";
 import { createAuditLog } from "../audit/audit.service.js";
+import { FileStorageService } from "../files/file-storage.service.js";
 import type { AgencyQueryInput, UpdateAgencyInput } from "./agency.schemas.js";
 
 type RequestMeta = {
@@ -71,7 +72,8 @@ export async function updateAgency(id: string, input: UpdateAgencyInput, auth: A
     throw new AppError("Insufficient permissions", 403, "INSUFFICIENT_PERMISSIONS");
   }
   assertAgencyAccess(auth, id);
-  const agency = await prisma.agency.update({ where: { id }, data: input }).catch(() => null);
+  const normalized = { ...input, website: input.website === "" ? null : input.website };
+  const agency = await prisma.agency.update({ where: { id }, data: normalized }).catch(() => null);
   if (!agency) throw new AppError("Agency not found", 404, "AGENCY_NOT_FOUND");
   await createAuditLog({
     action: AuditAction.UPDATE,
@@ -79,10 +81,38 @@ export async function updateAgency(id: string, input: UpdateAgencyInput, auth: A
     entityId: agency.id,
     userId: auth.userId,
     agencyId: agency.id,
-    metadata: { event: "agency.update" },
+    metadata: { event: "agency_company_updated" },
     ...meta
   });
   return getAgency(id, auth);
+}
+
+export async function updateCompany(id: string, input: UpdateAgencyInput, auth: AuthContext, meta: RequestMeta) {
+  if (auth.role === UserRole.STAFF) throw new AppError("Company settings are read-only for staff", 403, "COMPANY_READ_ONLY");
+  return updateAgency(id, input, auth, meta);
+}
+
+export async function uploadLogo(id: string, file: Express.Multer.File | undefined, auth: AuthContext, meta: RequestMeta) {
+  if (auth.role === UserRole.STAFF) throw new AppError("Company settings are read-only for staff", 403, "COMPANY_READ_ONLY");
+  if (auth.role !== UserRole.SUPER_ADMIN && !auth.permissions.includes("agencies:update")) {
+    throw new AppError("Insufficient permissions", 403, "INSUFFICIENT_PERMISSIONS");
+  }
+  assertAgencyAccess(auth, id);
+  if (!file) throw new AppError("Logo file is required", 400, "AGENCY_LOGO_REQUIRED");
+  const agency = await prisma.agency.findFirst({ where: { id, deletedAt: null } });
+  if (!agency) throw new AppError("Agency not found", 404, "AGENCY_NOT_FOUND");
+  const saved = await FileStorageService.saveFile(file, { agencyId: id, agencyLogo: true });
+  const updated = await prisma.agency.update({ where: { id }, data: { logoStorageKey: saved.storageKey, logoUrl: null } });
+  await createAuditLog({
+    action: AuditAction.UPDATE,
+    entity: "Agency",
+    entityId: id,
+    userId: auth.userId,
+    agencyId: id,
+    metadata: { event: "agency_logo_updated", storageKey: saved.storageKey },
+    ...meta
+  });
+  return updated;
 }
 
 export async function setAgencyStatus(id: string, status: AgencyStatus, auth: AuthContext, meta: RequestMeta) {
@@ -101,4 +131,22 @@ export async function setAgencyStatus(id: string, status: AgencyStatus, auth: Au
     ...meta
   });
   return getAgency(id, auth);
+}
+
+export async function deleteAgency(id: string, auth: AuthContext, meta: RequestMeta) {
+  if (auth.role !== UserRole.SUPER_ADMIN) {
+    throw new AppError("Super admin role is required", 403, "SUPER_ADMIN_REQUIRED");
+  }
+  const agency = await prisma.agency.update({ where: { id }, data: { deletedAt: new Date(), status: AgencyStatus.INACTIVE } }).catch(() => null);
+  if (!agency) throw new AppError("Agency not found", 404, "AGENCY_NOT_FOUND");
+  await createAuditLog({
+    action: AuditAction.DELETE,
+    entity: "Agency",
+    entityId: id,
+    userId: auth.userId,
+    agencyId: id,
+    metadata: { event: "agency_deleted" },
+    ...meta
+  });
+  return agency;
 }

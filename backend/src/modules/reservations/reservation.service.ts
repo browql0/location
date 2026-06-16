@@ -1,10 +1,11 @@
-import { AuditAction, CarStatus, PaymentStatus, Prisma, ReservationStatus, UserRole } from "@prisma/client";
+import { AuditAction, CarStatus, InvoiceStatus, InvoiceType, PaymentStatus, Prisma, ReservationStatus, UserRole, VehicleAnomalySeverity, VehicleAnomalyType } from "@prisma/client";
 import { prisma } from "../../prisma/prisma.service.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import type { AuthContext } from "../../shared/types/auth.js";
 import type { Permission } from "../../shared/utils/permissions.js";
 import { createAuditLog } from "../audit/audit.service.js";
 import { PlanLimitService } from "../subscriptions/plan-limit.service.js";
+import { detectCarAnomalies, ensureVehicleAnomaly } from "../vehicle-anomalies/vehicle-anomaly.service.js";
 import { assertCarAvailable, checkCarAvailability } from "./availability.service.js";
 import type {
   CancelReservationInput,
@@ -23,7 +24,13 @@ const reservationInclude = {
   client: { select: { id: true, firstName: true, lastName: true, phone: true, email: true } },
   car: { select: { id: true, brand: true, model: true, registrationNumber: true, status: true, dailyPrice: true } },
   createdBy: { select: { id: true, firstName: true, lastName: true } },
-  contract: { select: { id: true, contractNumber: true, generatedAt: true, pdfPath: true, signedAt: true } }
+  contract: { select: { id: true, contractNumber: true, generatedAt: true, pdfStorageKey: true, status: true, signedAt: true } },
+  invoices: {
+    where: { type: InvoiceType.RENTAL_INVOICE, status: { not: InvoiceStatus.CANCELLED } },
+    orderBy: { issuedAt: "desc" as const },
+    take: 1,
+    select: { id: true, invoiceNumber: true, status: true, issuedAt: true, pdfStorageKey: true, sentToClientAt: true }
+  }
 };
 
 function assertPermission(auth: AuthContext, permission: Permission) {
@@ -128,6 +135,7 @@ export async function createReservation(input: CreateReservationInput, auth: Aut
     await assertClientInAgency(tx, input.clientId, agencyId);
     const car = await assertCarAvailable(tx, { agencyId, carId: input.carId, startDate: input.startDate, endDate: input.endDate });
     const dailyPrice = input.dailyPrice ?? Number(car.dailyPrice);
+    const depositAmount = input.depositAmount ?? Number(car.defaultDeposit);
     const totals = financials({ startDate: input.startDate, endDate: input.endDate, dailyPrice, advanceAmount: input.advanceAmount });
     return tx.reservation.create({
       data: {
@@ -142,7 +150,7 @@ export async function createReservation(input: CreateReservationInput, auth: Aut
         totalAmount: totals.totalAmount,
         advanceAmount: input.advanceAmount,
         remainingAmount: totals.remainingAmount,
-        depositAmount: input.depositAmount ?? null,
+        depositAmount,
         status: ReservationStatus.CONFIRMED,
         paymentStatus: totals.paymentStatus,
         notes: input.notes ?? null
@@ -229,10 +237,27 @@ export async function completeReservation(id: string, input: CompleteReservation
   assertPermission(auth, "reservations:update");
   const current = await getScopedReservation(id, auth);
   if (current.status !== ReservationStatus.IN_PROGRESS) throw new AppError("Reservation cannot be completed", 409, "RESERVATION_CANNOT_COMPLETE");
+  const car = await prisma.car.findUnique({ where: { id: current.carId }, select: { id: true, agencyId: true, currentMileage: true, registrationNumber: true } });
+  if (!car) throw new AppError("Car not found", 404, "CAR_NOT_FOUND");
+  if (input.returnMileage !== undefined && input.returnMileage !== null && input.returnMileage < car.currentMileage) {
+    await ensureVehicleAnomaly({
+      agencyId: current.agencyId,
+      carId: current.carId,
+      type: VehicleAnomalyType.MILEAGE_ROLLBACK,
+      severity: VehicleAnomalySeverity.CRITICAL,
+      title: "Kilometrage retour inferieur",
+      description: `Retour ${input.returnMileage} km < kilometrage actuel ${car.currentMileage} km pour ${car.registrationNumber}.`
+    });
+    throw new AppError("Return mileage cannot be lower than current car mileage", 409, "MILEAGE_ROLLBACK_DETECTED");
+  }
   const updated = await prisma.$transaction(async (tx) => {
-    await tx.car.update({ where: { id: current.carId }, data: { status: CarStatus.AVAILABLE } });
+    await tx.car.update({ where: { id: current.carId }, data: { status: CarStatus.AVAILABLE, ...(input.returnMileage !== undefined && input.returnMileage !== null ? { currentMileage: input.returnMileage, mileage: input.returnMileage } : {}) } });
+    if (input.returnMileage !== undefined && input.returnMileage !== null) {
+      await tx.vehicleMileageLog.create({ data: { agencyId: current.agencyId, carId: current.carId, reservationId: current.id, mileage: input.returnMileage, loggedAt: new Date(), note: "Retour reservation" } });
+    }
     return tx.reservation.update({ where: { id }, data: { status: ReservationStatus.COMPLETED, returnMileage: input.returnMileage ?? null, returnFuelLevel: input.returnFuelLevel ?? null, returnCondition: input.returnCondition ?? null }, include: reservationInclude });
   });
+  await detectCarAnomalies(current.carId);
   await createAuditLog({ action: AuditAction.UPDATE, entity: "Reservation", entityId: id, userId: auth.userId, agencyId: updated.agencyId, metadata: { event: "reservation_completed", ...auditMeta(updated), oldStatus: current.status, newStatus: updated.status }, ...meta });
   return updated;
 }

@@ -25,9 +25,21 @@ export type SubscriptionPlan = {
 export type Agency = {
   id: string;
   name: string;
+  tradeName: string | null;
+  logoUrl: string | null;
+  logoStorageKey: string | null;
   email: string;
   phone: string | null;
+  address: string | null;
   city: string | null;
+  country: string | null;
+  ice: string | null;
+  ifNumber: string | null;
+  rc: string | null;
+  patente: string | null;
+  bankName: string | null;
+  rib: string | null;
+  website: string | null;
   status: StatusBadgeValue;
   createdAt: string;
   subscriptions: Subscription[];
@@ -108,6 +120,7 @@ export type SuperAdminDashboardData = {
     id: string;
     name: string;
     logoUrl: string | null;
+    logoStorageKey?: string | null;
     plan: string;
     mrr: number;
     revenueTotal: number;
@@ -195,6 +208,12 @@ export type AgencyDashboardData = {
     revenueYear: number;
     activeClients: number;
     fleetOccupancyRate: number;
+    vehiclesNeedingMaintenance: number;
+    overdueOilChanges: number;
+    plannedMaintenance: number;
+    criticalAnomalies: number;
+    expiredTechnicalInspections: number;
+    expiredInsurances: number;
   };
   alerts: {
     upcomingReservations: Array<{
@@ -315,8 +334,27 @@ export async function updateAgency(id: string, input: Partial<Agency>) {
   return response.data.data;
 }
 
+export async function updateAgencyCompany(id: string, input: Partial<Agency>) {
+  const response = await api.patch<ApiItem<Agency>>(`/agencies/${id}/company`, input);
+  return response.data.data;
+}
+
+export async function uploadAgencyLogo(id: string, file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await api.post<ApiItem<Agency>>(`/agencies/${id}/logo`, formData, {
+    headers: { "Content-Type": "multipart/form-data" }
+  });
+  return response.data.data;
+}
+
 export async function setAgencyEnabled(id: string, enabled: boolean) {
   const response = await api.patch<ApiItem<Agency>>(`/agencies/${id}/${enabled ? "enable" : "disable"}`);
+  return response.data.data;
+}
+
+export async function deleteAgency(id: string) {
+  const response = await api.delete<ApiItem<Agency>>(`/agencies/${id}`);
   return response.data.data;
 }
 

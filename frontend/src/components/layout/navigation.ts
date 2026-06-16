@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import type { Permission, UserRole } from "@/types/auth";
 import {
   BadgeDollarSign,
+  AlertTriangle,
   Building2,
   CalendarClock,
   Car,
@@ -11,7 +12,8 @@ import {
   Settings,
   ShieldCheck,
   Users,
-  WalletCards
+  WalletCards,
+  Wrench
 } from "lucide-react";
 
 export type NavItem = {
@@ -34,12 +36,23 @@ const superAdminNavigationGroups: NavGroup[] = [
       { label: "Dashboard", href: "/super-admin/dashboard", icon: Gauge },
       { label: "Agences", href: "/super-admin/agencies", icon: Building2 },
       { label: "Abonnements", href: "/super-admin/subscriptions", icon: CreditCard },
+      { label: "Factures", href: "/invoices", icon: FileText, permission: "invoices:read" },
       { label: "Plans", href: "/super-admin/plans", icon: BadgeDollarSign }
     ]
   },
   {
+    label: "Operations",
+    items: [
+      { label: "Maintenance", href: "/maintenance", icon: Wrench, permission: "maintenance:read" },
+      { label: "Alertes vehicules", href: "/vehicle-alerts", icon: AlertTriangle, permission: "maintenance:read" }
+    ]
+  },
+  {
     label: "Systeme",
-    items: [{ label: "Profil", href: "/profile", icon: Settings }]
+    items: [
+      { label: "Entreprise", href: "/settings/company", icon: Building2 },
+      { label: "Profil", href: "/profile", icon: Settings }
+    ]
   }
 ];
 
@@ -54,19 +67,22 @@ const agencyNavigationGroups: NavGroup[] = [
       { label: "Staff", href: "/staff", icon: ShieldCheck, permission: "users:read" },
       { label: "Voitures", href: "/cars", icon: Car, permission: "cars:read" },
       { label: "Clients", href: "/clients", icon: Users, permission: "clients:read" },
-      { label: "Reservations", href: "/reservations", icon: CalendarClock, permission: "reservations:read" }
+      { label: "Reservations", href: "/reservations", icon: CalendarClock, permission: "reservations:read" },
+      { label: "Maintenance", href: "/maintenance", icon: Wrench, permission: "maintenance:read" },
+      { label: "Alertes vehicules", href: "/vehicle-alerts", icon: AlertTriangle, permission: "maintenance:read" }
     ]
   },
   {
     label: "Finance",
     items: [
-      { label: "Factures", href: "/invoices", icon: FileText, permission: "invoices:read", disabled: true },
+      { label: "Factures", href: "/invoices", icon: FileText, permission: "invoices:read" },
       { label: "Contrats", href: "/contracts", icon: FileText, permission: "contracts:read" }
     ]
   },
   {
     label: "Systeme",
     items: [
+      { label: "Entreprise", href: "/settings/company", icon: Building2, permission: "agencies:update" },
       { label: "Parametres", href: "/settings/subscription", icon: Settings, permission: "subscriptions:read" },
       { label: "Profil", href: "/profile", icon: Settings }
     ]
@@ -81,6 +97,9 @@ const staffNavigationGroups: NavGroup[] = [
       { label: "Reservations", href: "/reservations", icon: CalendarClock, permission: "reservations:read" },
       { label: "Calendrier", href: "/reservations/calendar", icon: CalendarClock, permission: "reservations:read" },
       { label: "Clients", href: "/clients", icon: Users, permission: "clients:read" },
+      { label: "Maintenance", href: "/maintenance", icon: Wrench, permission: "maintenance:read" },
+      { label: "Alertes vehicules", href: "/vehicle-alerts", icon: AlertTriangle, permission: "maintenance:read" },
+      { label: "Factures", href: "/invoices", icon: FileText, permission: "invoices:read" },
       { label: "Contrats", href: "/contracts", icon: FileText, permission: "contracts:read" }
     ]
   },

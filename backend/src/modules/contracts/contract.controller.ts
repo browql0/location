@@ -25,3 +25,19 @@ export const downloadContract: RequestHandler = asyncHandler(async (req: Request
   res.setHeader("Content-Disposition", `attachment; filename="${file.fileName}"`);
   file.stream.pipe(res);
 });
+
+export const signClient: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  res.json({ data: await service.signClient(String(req.params.id), req.auth!, requestMeta(req)) });
+});
+
+export const signAgency: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  res.json({ data: await service.signAgency(String(req.params.id), req.auth!, requestMeta(req)) });
+});
+
+export const archiveContract: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  res.json({ data: await service.archiveContract(String(req.params.id), req.auth!, requestMeta(req)) });
+});
+
+export const cancelContract: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  res.json({ data: await service.cancelContract(String(req.params.id), req.auth!, requestMeta(req)) });
+});

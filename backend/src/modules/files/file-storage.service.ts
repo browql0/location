@@ -1,86 +1,70 @@
 import { randomBytes } from "node:crypto";
-import { createReadStream } from "node:fs";
-import { mkdir, unlink, writeFile } from "node:fs/promises";
-import { Readable } from "node:stream";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env } from "../../config/env.js";
 import { AppError } from "../../shared/errors/app-error.js";
 
 export type StoredFile = {
   storageKey: string;
-  fileUrl: string | null;
 };
 
 export type SaveFileOptions = {
   agencyId: string;
   clientId?: string;
   carId?: string;
+  maintenanceId?: string;
+  expenseId?: string;
+  agencyLogo?: boolean;
   file: Express.Multer.File;
+};
+
+export type SaveBufferOptions = {
+  agencyId: string;
+  folder: "contracts" | "invoices";
+  entityId: string;
+  fileName: string;
+  mimeType: string;
 };
 
 export interface FileStorageProvider {
   saveFile(file: Express.Multer.File, options: Omit<SaveFileOptions, "file">): Promise<StoredFile>;
+  saveBuffer(buffer: Buffer, options: SaveBufferOptions): Promise<StoredFile>;
   deleteFile(storageKey: string): Promise<void>;
-  getSignedDownloadUrl(storageKey: string): Promise<string>;
   getFileStream(storageKey: string): Promise<Readable>;
 }
 
 const allowedExtensions = new Set([".pdf", ".png", ".jpg", ".jpeg"]);
-const backendRoot = path.basename(process.cwd()) === "backend" ? process.cwd() : path.resolve(process.cwd(), "backend");
-const clientsUploadRoot = path.resolve(backendRoot, "uploads");
+const allowedStoragePrefixes = ["clients/", "cars/", "agency-logos/", "maintenance/", "expenses/", "contracts/", "invoices/"];
 
 function extensionFor(originalName: string) {
   return path.extname(originalName).toLowerCase();
 }
 
-function storageKeyFor(options: Omit<SaveFileOptions, "file">, originalName: string) {
+function safeFileName(originalName: string) {
   const ext = extensionFor(originalName);
-  const entity = options.carId ? { folder: "cars", id: options.carId } : { folder: "clients", id: options.clientId };
-  if (!entity.id) throw new AppError("Storage entity id is required", 400, "STORAGE_ENTITY_REQUIRED");
-  return `${entity.folder}/${options.agencyId}/${entity.id}/${Date.now()}-${randomBytes(8).toString("hex")}${ext}`;
+  const baseName = path.basename(originalName, ext).replace(/[^a-zA-Z0-9._-]+/g, "-") || "file";
+  return `${Date.now()}-${randomBytes(8).toString("hex")}-${baseName}${ext}`;
+}
+
+function storageKeyFor(options: Omit<SaveFileOptions, "file">, originalName: string) {
+  if (options.agencyLogo) return `agency-logos/${options.agencyId}/${safeFileName(originalName)}`;
+  if (options.expenseId) return `expenses/${options.agencyId}/${options.expenseId}/${safeFileName(originalName)}`;
+  if (options.maintenanceId) return `maintenance/${options.agencyId}/${options.maintenanceId}/${safeFileName(originalName)}`;
+  if (options.carId) return `cars/${options.agencyId}/${options.carId}/${safeFileName(originalName)}`;
+  if (options.clientId) return `clients/${options.agencyId}/${options.clientId}/${safeFileName(originalName)}`;
+  throw new AppError("Storage entity id is required", 400, "STORAGE_ENTITY_REQUIRED");
+}
+
+function storageKeyForBuffer(options: SaveBufferOptions) {
+  if (options.folder === "contracts") return `contracts/${options.agencyId}/${options.entityId}.pdf`;
+  if (options.folder === "invoices") return `invoices/${options.agencyId}/${options.entityId}.pdf`;
+  throw new AppError("Unsupported generated file folder", 400, "STORAGE_FOLDER_UNSUPPORTED");
 }
 
 function assertSafeStorageKey(storageKey: string) {
-  if (storageKey.includes("..") || path.isAbsolute(storageKey) || (!storageKey.startsWith("clients/") && !storageKey.startsWith("cars/"))) {
+  if (storageKey.includes("..") || path.isAbsolute(storageKey) || !allowedStoragePrefixes.some((prefix) => storageKey.startsWith(prefix))) {
     throw new AppError("Invalid storage key", 400, "INVALID_STORAGE_KEY");
-  }
-}
-
-function publicUrlFor(storageKey: string) {
-  if (!env.R2_PUBLIC_URL) return null;
-  return `${env.R2_PUBLIC_URL.replace(/\/$/, "")}/${storageKey}`;
-}
-
-class LocalStorageProvider implements FileStorageProvider {
-  async saveFile(file: Express.Multer.File, options: Omit<SaveFileOptions, "file">) {
-    const storageKey = storageKeyFor(options, file.originalname);
-    const filePath = this.resolveLocalPath(storageKey);
-    await mkdir(path.dirname(filePath), { recursive: true });
-    await writeFile(filePath, file.buffer);
-    return { storageKey, fileUrl: null };
-  }
-
-  async deleteFile(storageKey: string) {
-    await unlink(this.resolveLocalPath(storageKey));
-  }
-
-  async getSignedDownloadUrl(_storageKey: string): Promise<string> {
-    throw new AppError("Signed URLs are not supported for local storage", 501, "SIGNED_URL_UNSUPPORTED");
-  }
-
-  async getFileStream(storageKey: string) {
-    return createReadStream(this.resolveLocalPath(storageKey));
-  }
-
-  private resolveLocalPath(storageKey: string) {
-    assertSafeStorageKey(storageKey);
-    const filePath = path.resolve(clientsUploadRoot, storageKey);
-    if (!filePath.startsWith(`${clientsUploadRoot}${path.sep}`)) {
-      throw new AppError("Invalid storage key", 400, "INVALID_STORAGE_KEY");
-    }
-    return filePath;
   }
 }
 
@@ -88,13 +72,9 @@ class R2StorageProvider implements FileStorageProvider {
   private readonly client: S3Client;
 
   constructor() {
-    const endpoint = env.R2_ENDPOINT || (env.R2_ACCOUNT_ID ? `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : "");
-    if (!endpoint || !env.R2_ACCESS_KEY_ID || !env.R2_SECRET_ACCESS_KEY || !env.R2_BUCKET_NAME) {
-      throw new AppError("Cloudflare R2 configuration is incomplete", 500, "R2_CONFIG_INCOMPLETE");
-    }
     this.client = new S3Client({
       region: "auto",
-      endpoint,
+      endpoint: env.R2_ENDPOINT,
       credentials: {
         accessKeyId: env.R2_ACCESS_KEY_ID,
         secretAccessKey: env.R2_SECRET_ACCESS_KEY
@@ -104,26 +84,19 @@ class R2StorageProvider implements FileStorageProvider {
 
   async saveFile(file: Express.Multer.File, options: Omit<SaveFileOptions, "file">) {
     const storageKey = storageKeyFor(options, file.originalname);
-    await this.client.send(
-      new PutObjectCommand({
-        Bucket: env.R2_BUCKET_NAME,
-        Key: storageKey,
-        Body: file.buffer,
-        ContentType: file.mimetype,
-        ContentLength: file.size
-      })
-    );
-    return { storageKey, fileUrl: publicUrlFor(storageKey) };
+    await this.putObject(storageKey, file.buffer, file.mimetype, file.size);
+    return { storageKey };
+  }
+
+  async saveBuffer(buffer: Buffer, options: SaveBufferOptions) {
+    const storageKey = storageKeyForBuffer(options);
+    await this.putObject(storageKey, buffer, options.mimeType, buffer.length);
+    return { storageKey };
   }
 
   async deleteFile(storageKey: string) {
     assertSafeStorageKey(storageKey);
     await this.client.send(new DeleteObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: storageKey }));
-  }
-
-  async getSignedDownloadUrl(storageKey: string) {
-    assertSafeStorageKey(storageKey);
-    return getSignedUrl(this.client, new GetObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: storageKey }), { expiresIn: 60 * 5 });
   }
 
   async getFileStream(storageKey: string) {
@@ -134,24 +107,35 @@ class R2StorageProvider implements FileStorageProvider {
     }
     return response.Body;
   }
+
+  private async putObject(storageKey: string, body: Buffer, contentType: string, contentLength: number) {
+    assertSafeStorageKey(storageKey);
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: env.R2_BUCKET_NAME,
+        Key: storageKey,
+        Body: body,
+        ContentType: contentType,
+        ContentLength: contentLength
+      })
+    );
+  }
 }
 
-function createProvider(): FileStorageProvider {
-  return env.FILE_STORAGE_DRIVER === "r2" ? new R2StorageProvider() : new LocalStorageProvider();
-}
+const r2StorageProvider = new R2StorageProvider();
 
 export const FileStorageService: FileStorageProvider = {
   saveFile(file, options) {
-    return createProvider().saveFile(file, options);
+    return r2StorageProvider.saveFile(file, options);
+  },
+  saveBuffer(buffer, options) {
+    return r2StorageProvider.saveBuffer(buffer, options);
   },
   deleteFile(storageKey) {
-    return createProvider().deleteFile(storageKey);
-  },
-  getSignedDownloadUrl(storageKey) {
-    return createProvider().getSignedDownloadUrl(storageKey);
+    return r2StorageProvider.deleteFile(storageKey);
   },
   getFileStream(storageKey) {
-    return createProvider().getFileStream(storageKey);
+    return r2StorageProvider.getFileStream(storageKey);
   }
 };
 
@@ -175,4 +159,12 @@ export function isAllowedCarPhotoFile(file: Pick<Express.Multer.File, "mimetype"
   if (file.mimetype === "image/webp") return ext === ".webp";
   if (file.mimetype === "image/jpeg" || file.mimetype === "image/jpg") return ext === ".jpg" || ext === ".jpeg";
   return false;
+}
+
+export function isAllowedAgencyLogoFile(file: Pick<Express.Multer.File, "mimetype" | "originalname">) {
+  return isAllowedCarPhotoFile(file);
+}
+
+export function isAllowedMaintenanceDocumentFile(file: Pick<Express.Multer.File, "mimetype" | "originalname">) {
+  return isAllowedClientDocumentFile(file);
 }

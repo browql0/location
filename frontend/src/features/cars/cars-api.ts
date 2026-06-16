@@ -23,7 +23,9 @@ export type CarDocument = {
   carId: string;
   type: DocumentType;
   fileName: string;
-  fileUrl: string;
+  mimeType: string | null;
+  size: number | null;
+  storageKey: string;
   createdAt: string;
 };
 
@@ -43,7 +45,14 @@ export type Car = {
   dailyPrice: string;
   weeklyPrice: string;
   monthlyPrice: string;
+  defaultDeposit: string;
   mileage: number;
+  currentMileage: number;
+  nextOilChangeKm: number | null;
+  nextTireChangeKm: number | null;
+  nextBrakeCheckKm: number | null;
+  nextInspectionKm: number | null;
+  nextMaintenanceKm: number | null;
   status: CarStatus;
   insuranceExpiryDate: string | null;
   technicalVisitExpiryDate: string | null;
@@ -69,7 +78,14 @@ export type CarPayload = {
   dailyPrice: number;
   weeklyPrice: number;
   monthlyPrice: number;
+  defaultDeposit: number;
   mileage: number;
+  currentMileage?: number;
+  nextOilChangeKm?: number | null;
+  nextTireChangeKm?: number | null;
+  nextBrakeCheckKm?: number | null;
+  nextInspectionKm?: number | null;
+  nextMaintenanceKm?: number | null;
   status?: CarStatus;
   insuranceExpiryDate?: string | null;
   technicalVisitExpiryDate?: string | null;
@@ -152,9 +168,24 @@ export async function listCarDocuments(carId: string) {
   return response.data.data;
 }
 
-export async function addCarDocument(carId: string, input: { type: DocumentType; fileName: string; fileUrl: string }) {
-  const response = await api.post<ApiItem<CarDocument>>(`/cars/${carId}/documents`, input);
+export async function addCarDocument(carId: string, input: { type: DocumentType; file: File }) {
+  const formData = new FormData();
+  formData.append("type", input.type);
+  formData.append("file", input.file);
+  const response = await api.post<ApiItem<CarDocument>>(`/cars/${carId}/documents`, formData, {
+    headers: { "Content-Type": "multipart/form-data" }
+  });
   return response.data.data;
+}
+
+export async function downloadCarDocument(document: CarDocument) {
+  const response = await api.get<Blob>(`/cars/documents/${document.id}/download`, { responseType: "blob" });
+  const url = URL.createObjectURL(response.data);
+  const link = window.document.createElement("a");
+  link.href = url;
+  link.download = document.fileName;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export async function deleteCarDocument(id: string) {

@@ -14,10 +14,13 @@ import { clientRouter } from "./modules/clients/client.routes.js";
 import { contractRouter } from "./modules/contracts/contract.routes.js";
 import { agencyRouter } from "./modules/agencies/agency.routes.js";
 import { dashboardRouter } from "./modules/dashboard/dashboard.routes.js";
+import { invoiceRouter } from "./modules/invoices/invoice.routes.js";
+import { maintenanceRouter } from "./modules/maintenance/maintenance.routes.js";
 import { reservationRouter } from "./modules/reservations/reservation.routes.js";
 import { subscriptionPlanRouter } from "./modules/subscription-plans/subscription-plan.routes.js";
 import { subscriptionRouter } from "./modules/subscriptions/subscription.routes.js";
 import { userRouter } from "./modules/users/user.routes.js";
+import { vehicleAnomalyRouter } from "./modules/vehicle-anomalies/vehicle-anomaly.routes.js";
 
 export const app = express();
 
@@ -42,6 +45,9 @@ app.use(`${env.API_PREFIX}/cars`, carRouter);
 app.use(`${env.API_PREFIX}/clients`, clientRouter);
 app.use(`${env.API_PREFIX}/reservations`, reservationRouter);
 app.use(`${env.API_PREFIX}/contracts`, contractRouter);
+app.use(`${env.API_PREFIX}/invoices`, invoiceRouter);
+app.use(`${env.API_PREFIX}/maintenance`, maintenanceRouter);
+app.use(`${env.API_PREFIX}/vehicle-anomalies`, vehicleAnomalyRouter);
 
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);

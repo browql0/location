@@ -11,6 +11,7 @@ import { PageSkeleton } from "@/components/ui-custom/page-skeleton";
 import { StatusBadge } from "@/components/ui-custom/status-badge";
 import { useAuth } from "@/features/auth/auth-provider";
 import { downloadContractPdf, generateContract } from "@/features/contracts/contracts-api";
+import { downloadInvoicePdf, generateRentalInvoice, sendInvoiceToClient } from "@/features/invoices/invoices-api";
 import { cancelReservation, completeReservation, getReservation, startReservation, type Reservation } from "@/features/reservations/reservations-api";
 import { getApiErrorMessage } from "@/lib/api-error";
 import type { AuthUser, Permission } from "@/types/auth";
@@ -32,6 +33,8 @@ export function ReservationDetailPage() {
   const canUpdate = hasPermission(user, "reservations:update");
   const canCreateContract = hasPermission(user, "contracts:create");
   const canReadContract = hasPermission(user, "contracts:read");
+  const canCreateInvoice = hasPermission(user, "invoices:create");
+  const canReadInvoice = hasPermission(user, "invoices:read");
 
   async function load() {
     if (!id) return;
@@ -86,6 +89,27 @@ export function ReservationDetailPage() {
     }
   }
 
+  async function runGenerateInvoice() {
+    if (!reservation) return;
+    try {
+      const invoice = await generateRentalInvoice(reservation.id);
+      toast.success("Facture generee", { description: invoice.invoiceNumber });
+      await load();
+    } catch (error) {
+      toast.error("Generation impossible", { description: getApiErrorMessage(error) });
+    }
+  }
+
+  async function runSendInvoice(invoiceId: string) {
+    try {
+      await sendInvoiceToClient(invoiceId);
+      toast.success("Envoi facture prepare");
+      await load();
+    } catch (error) {
+      toast.error("Envoi impossible", { description: getApiErrorMessage(error) });
+    }
+  }
+
   return (
     <PageContainer>
       <AppPageHeader
@@ -125,8 +149,23 @@ export function ReservationDetailPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             {reservation.contract && canReadContract ? <Button asChild variant="outline"><Link to={`/contracts/${reservation.contract.id}`}><FileText className="mr-2 h-4 w-4" /> Voir contrat</Link></Button> : null}
-            {reservation.contract?.pdfPath ? <Button type="button" variant="outline" onClick={() => downloadContractPdf(reservation.contract!.id, reservation.contract!.contractNumber)}><Download className="mr-2 h-4 w-4" /> Télécharger PDF</Button> : null}
+            {reservation.contract?.pdfStorageKey ? <Button type="button" variant="outline" onClick={() => downloadContractPdf(reservation.contract!.id, reservation.contract!.contractNumber)}><Download className="mr-2 h-4 w-4" /> Télécharger PDF</Button> : null}
             {!reservation.contract && canCreateContract ? <Button type="button" onClick={runGenerateContract}><FileText className="mr-2 h-4 w-4" /> Générer contrat</Button> : null}
+          </div>
+        </div>
+      </AppSection>
+
+      <AppSection className="rounded-lg border bg-card p-5" title="Facture">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium">{reservation.invoices?.[0] ? reservation.invoices[0].invoiceNumber : "Aucune facture generee"}</p>
+            <p className="text-sm text-muted-foreground">{reservation.invoices?.[0] ? `Emise le ${date(reservation.invoices[0].issuedAt)}` : "Generez la facture PDF depuis cette reservation."}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {reservation.invoices?.[0] && canReadInvoice ? <Button asChild variant="outline"><Link to={`/invoices/${reservation.invoices[0].id}`}><FileText className="mr-2 h-4 w-4" /> Voir facture</Link></Button> : null}
+            {reservation.invoices?.[0]?.pdfStorageKey ? <Button type="button" variant="outline" onClick={() => downloadInvoicePdf(reservation.invoices![0].id, reservation.invoices![0].invoiceNumber)}><Download className="mr-2 h-4 w-4" /> Télécharger PDF</Button> : null}
+            {reservation.invoices?.[0] ? <Button type="button" variant="outline" onClick={() => runSendInvoice(reservation.invoices![0].id)}><FileText className="mr-2 h-4 w-4" /> Envoyer au client</Button> : null}
+            {!reservation.invoices?.[0] && canCreateInvoice ? <Button type="button" onClick={runGenerateInvoice}><FileText className="mr-2 h-4 w-4" /> Générer facture</Button> : null}
           </div>
         </div>
       </AppSection>

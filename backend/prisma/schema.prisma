@@ -65,9 +65,23 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum ContractStatus {
+  GENERATED
+  SIGNED
+  ARCHIVED
+  CANCELLED
+}
+
+enum InvoiceType {
+  SAAS_INVOICE
+  RENTAL_INVOICE
+}
+
 enum InvoiceStatus {
   DRAFT
+  ISSUED
   SENT
+  PARTIAL
   PAID
   CANCELLED
 }
@@ -147,11 +161,40 @@ enum MaintenanceType {
   OIL_CHANGE
   TIRES
   BRAKES
+  BATTERY
+  INSURANCE
+  TECHNICAL_INSPECTION
+  AIR_CONDITIONING
   ENGINE
+  TRANSMISSION
   BODYWORK
-  TECHNICAL_VISIT
-  GENERAL_SERVICE
+  CLEANING
   OTHER
+}
+
+enum MaintenanceStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum VehicleAnomalyType {
+  MILEAGE_ROLLBACK
+  EXCESSIVE_MILEAGE
+  OVERDUE_OIL_CHANGE
+  OVERDUE_MAINTENANCE
+  INSURANCE_EXPIRED
+  TECHNICAL_INSPECTION_EXPIRED
+  DOCUMENT_MISSING
+  OTHER
+}
+
+enum VehicleAnomalySeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
 }
 
 enum ReminderType {
@@ -203,12 +246,21 @@ enum ClientDocumentType {
 model Agency {
   id        String       @id @default(cuid())
   name      String
+  tradeName String?
   logoUrl   String?
+  logoStorageKey String?
   email     String
   phone     String?
   address   String?
   city      String?
   country   String?      @default("Morocco")
+  ice       String?
+  ifNumber  String?
+  rc        String?
+  patente   String?
+  bankName  String?
+  rib       String?
+  website   String?
   status    AgencyStatus @default(ACTIVE)
 
   users                 User[]
@@ -223,6 +275,7 @@ model Agency {
   subscriptions         Subscription[]
   expenses              Expense[]
   maintenanceRecords    MaintenanceRecord[]
+  vehicleAnomalies      VehicleAnomaly[]
   reminders             Reminder[]
   securityDeposits      SecurityDeposit[]
   mileageLogs           VehicleMileageLog[]
@@ -297,6 +350,8 @@ model Subscription {
   previousPlanId  String?
   metadata        Json?
 
+  invoices Invoice[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -363,7 +418,14 @@ model Car {
   dailyPrice               Decimal          @db.Decimal(10, 2)
   weeklyPrice              Decimal          @default(0) @db.Decimal(10, 2)
   monthlyPrice             Decimal          @default(0) @db.Decimal(10, 2)
+  defaultDeposit           Decimal          @default(0) @db.Decimal(10, 2)
   mileage                  Int              @default(0)
+  currentMileage           Int              @default(0)
+  nextOilChangeKm          Int?
+  nextTireChangeKm         Int?
+  nextBrakeCheckKm         Int?
+  nextInspectionKm         Int?
+  nextMaintenanceKm        Int?
   status                   CarStatus        @default(AVAILABLE)
   insuranceExpiryDate      DateTime?
   technicalVisitExpiryDate DateTime?
@@ -374,6 +436,7 @@ model Car {
   reservations       Reservation[]
   expenses           Expense[]
   maintenanceRecords MaintenanceRecord[]
+  vehicleAnomalies   VehicleAnomaly[]
   mileageLogs        VehicleMileageLog[]
 
   createdAt DateTime  @default(now())
@@ -411,12 +474,15 @@ model CarDocument {
   car      Car          @relation(fields: [carId], references: [id])
   type     DocumentType
   fileName String
-  fileUrl  String
+  mimeType String?
+  size     Int?
+  storageKey String
 
   createdAt DateTime @default(now())
 
   @@index([carId])
   @@index([type])
+  @@index([storageKey])
 }
 
 model Client {
@@ -462,7 +528,6 @@ model ClientDocument {
   mimeType   String
   size       Int
   storageKey String
-  fileUrl    String?
 
   createdAt DateTime @default(now())
 
@@ -539,46 +604,61 @@ model Reservation {
 }
 
 model Contract {
-  id              String      @id @default(cuid())
+  id              String         @id @default(cuid())
   agencyId        String
-  agency          Agency      @relation(fields: [agencyId], references: [id])
-  reservationId   String      @unique
-  reservation     Reservation @relation(fields: [reservationId], references: [id])
+  agency          Agency         @relation(fields: [agencyId], references: [id])
+  reservationId   String         @unique
+  reservation     Reservation    @relation(fields: [reservationId], references: [id])
   contractNumber  String
-  generatedAt     DateTime    @default(now())
-  pdfPath         String?
+  pdfStorageKey   String?
+  status          ContractStatus @default(GENERATED)
+  generatedAt     DateTime       @default(now())
+  signedByClient  Boolean        @default(false)
+  signedByAgency  Boolean        @default(false)
   signedAt        DateTime?
+  archivedAt      DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([agencyId, contractNumber])
   @@index([agencyId])
+  @@index([status])
 }
 
 model Invoice {
   id              String        @id @default(cuid())
-  agencyId        String
-  agency          Agency        @relation(fields: [agencyId], references: [id])
-  reservationId   String
-  reservation     Reservation   @relation(fields: [reservationId], references: [id])
+  agencyId        String?
+  agency          Agency?       @relation(fields: [agencyId], references: [id])
+  reservationId   String?
+  reservation     Reservation?  @relation(fields: [reservationId], references: [id])
+  subscriptionId  String?
+  subscription    Subscription? @relation(fields: [subscriptionId], references: [id])
+  type            InvoiceType
   invoiceNumber   String
-  status          InvoiceStatus @default(DRAFT)
+  status          InvoiceStatus @default(ISSUED)
   totalAmount     Decimal       @db.Decimal(10, 2)
-  advanceAmount   Decimal       @db.Decimal(10, 2)
+  paidAmount      Decimal       @default(0) @db.Decimal(10, 2)
   remainingAmount Decimal       @db.Decimal(10, 2)
-  pdfUrl          String?
+  currency        String        @default("MAD")
+  pdfStorageKey   String?
+  issuedAt        DateTime      @default(now())
+  dueDate         DateTime?
   sentToClientAt  DateTime?
   sentToAgencyAt  DateTime?
   paidAt          DateTime?
+  cancelledAt     DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([agencyId, invoiceNumber])
+  @@unique([invoiceNumber])
   @@index([agencyId])
+  @@index([reservationId])
+  @@index([subscriptionId])
+  @@index([type])
   @@index([status])
-  @@index([createdAt])
+  @@index([issuedAt])
 }
 
 model Payment {
@@ -641,25 +721,70 @@ model Expense {
 }
 
 model MaintenanceRecord {
-  id          String          @id @default(cuid())
-  agencyId    String
-  agency      Agency          @relation(fields: [agencyId], references: [id])
-  carId       String
-  car         Car             @relation(fields: [carId], references: [id])
-  date        DateTime
-  type        MaintenanceType
-  cost        Decimal?        @db.Decimal(10, 2)
-  garage      String?
-  description String?
-  attachments File[]          @relation("MaintenanceAttachments")
+  id               String            @id @default(cuid())
+  agencyId         String
+  agency           Agency            @relation(fields: [agencyId], references: [id])
+  carId            String
+  car              Car               @relation(fields: [carId], references: [id])
+  type             MaintenanceType
+  status           MaintenanceStatus @default(PLANNED)
+  title            String
+  description      String?
+  scheduledDate    DateTime
+  completedDate    DateTime?
+  mileageAtService Int?
+  cost             Decimal?          @db.Decimal(10, 2)
+  vendor           String?
+  notes            String?
+  createdBy        String?
+  documents        MaintenanceDocument[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   @@index([agencyId])
   @@index([carId])
-  @@index([date])
+  @@index([scheduledDate])
+  @@index([status])
   @@index([type])
+}
+
+model MaintenanceDocument {
+  id            String            @id @default(cuid())
+  maintenanceId String
+  maintenance   MaintenanceRecord @relation(fields: [maintenanceId], references: [id])
+  fileName      String
+  mimeType      String
+  size          Int
+  storageKey    String
+
+  createdAt DateTime @default(now())
+
+  @@index([maintenanceId])
+  @@index([storageKey])
+}
+
+model VehicleAnomaly {
+  id          String                 @id @default(cuid())
+  agencyId    String
+  agency      Agency                 @relation(fields: [agencyId], references: [id])
+  carId       String
+  car         Car                    @relation(fields: [carId], references: [id])
+  type        VehicleAnomalyType
+  severity    VehicleAnomalySeverity
+  title       String
+  description String?
+  resolved    Boolean                @default(false)
+  resolvedAt  DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([agencyId])
+  @@index([carId])
+  @@index([type])
+  @@index([severity])
+  @@index([resolved])
 }
 
 model VehicleMileageLog {
@@ -800,12 +925,10 @@ model File {
   filename   String
   mimeType   String
   size       Int
-  url        String
   storageKey String
 
   incidentEvidences     IncidentEvidence[]
   expenseAttachments    Expense[]          @relation("ExpenseAttachments")
-  maintenanceAttachments MaintenanceRecord[] @relation("MaintenanceAttachments")
 
   createdAt DateTime @default(now())
 

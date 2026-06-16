@@ -11,7 +11,12 @@ import { CarsPage } from "@/pages/cars-page";
 import { ContractDetailPage } from "@/pages/contract-detail-page";
 import { ContractsPage } from "@/pages/contracts-page";
 import { DashboardPage } from "@/pages/dashboard-page";
+import { InvoiceDetailPage } from "@/pages/invoice-detail-page";
+import { InvoicesPage } from "@/pages/invoices-page";
 import { LoginPage } from "@/pages/login-page";
+import { MaintenanceDetailPage } from "@/pages/maintenance-detail-page";
+import { MaintenanceFormPage } from "@/pages/maintenance-form-page";
+import { MaintenancePage } from "@/pages/maintenance-page";
 import { NotFoundPage } from "@/pages/not-found-page";
 import { ProfilePage } from "@/pages/profile-page";
 import { RegisterAgencyPage } from "@/pages/register-agency-page";
@@ -19,6 +24,7 @@ import { ReservationDetailPage } from "@/pages/reservation-detail-page";
 import { ReservationFormPage } from "@/pages/reservation-form-page";
 import { ReservationsCalendarPage } from "@/pages/reservations-calendar-page";
 import { ReservationsPage } from "@/pages/reservations-page";
+import { SettingsCompanyPage } from "@/pages/settings-company-page";
 import { SettingsSubscriptionPage } from "@/pages/settings-subscription-page";
 import { StaffPage } from "@/pages/staff-page";
 import { StaffDashboardPage } from "@/pages/staff-dashboard-page";
@@ -27,6 +33,7 @@ import { SuperAdminDashboardPage } from "@/pages/super-admin-dashboard-page";
 import { SuperAdminPlansPage } from "@/pages/super-admin-plans-page";
 import { SuperAdminSubscriptionsPage } from "@/pages/super-admin-subscriptions-page";
 import { UnauthorizedPage } from "@/pages/unauthorized-page";
+import { VehicleAlertsPage } from "@/pages/vehicle-alerts-page";
 import { PermissionGuard } from "./permission-guard";
 import { ProtectedRoute } from "./protected-route";
 import { RoleGuard } from "./role-guard";
@@ -183,10 +190,46 @@ export const router = createBrowserRouter([
                 ]
               },
               {
+                element: <PermissionGuard permissions={["maintenance:read"]} />,
+                children: [
+                  { path: "maintenance", element: <MaintenancePage /> },
+                  { path: "maintenance/:id", element: <MaintenanceDetailPage /> },
+                  { path: "vehicle-alerts", element: <VehicleAlertsPage /> }
+                ]
+              },
+              {
+                element: <PermissionGuard permissions={["maintenance:create"]} />,
+                children: [
+                  { path: "maintenance/new", element: <MaintenanceFormPage /> }
+                ]
+              },
+              {
+                element: <PermissionGuard permissions={["maintenance:update"]} />,
+                children: [
+                  { path: "maintenance/:id/edit", element: <MaintenanceFormPage /> }
+                ]
+              },
+              {
+                element: <PermissionGuard permissions={["invoices:read"]} />,
+                children: [
+                  { path: "invoices", element: <InvoicesPage /> },
+                  { path: "invoices/:id", element: <InvoiceDetailPage /> }
+                ]
+              },
+              {
                 element: <PermissionGuard permissions={["contracts:read"]} />,
                 children: [
                   { path: "contracts", element: <ContractsPage /> },
                   { path: "contracts/:id", element: <ContractDetailPage /> }
+                ]
+              },
+              {
+                element: <RoleGuard roles={["SUPER_ADMIN", "AGENCY_ADMIN"]} />,
+                children: [
+                  {
+                    path: "settings/company",
+                    element: <SettingsCompanyPage />
+                  }
                 ]
               },
               {

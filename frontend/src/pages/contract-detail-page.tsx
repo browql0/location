@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Download, FileText } from "lucide-react";
+import { Archive, Ban, Download, FileText, PenLine } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { AppPageHeader } from "@/components/ui-custom/app-page-header";
@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/ui-custom/empty-state";
 import { PageContainer } from "@/components/ui-custom/page-container";
 import { PageSkeleton } from "@/components/ui-custom/page-skeleton";
 import { StatusBadge } from "@/components/ui-custom/status-badge";
-import { downloadContractPdf, getContract, type Contract } from "@/features/contracts/contracts-api";
+import { archiveContract, cancelContract, downloadContractPdf, getContract, signContractAgency, signContractClient, type Contract } from "@/features/contracts/contracts-api";
 import { getApiErrorMessage } from "@/lib/api-error";
 
 const date = (value: string) => new Date(value).toLocaleDateString("fr-FR");
@@ -20,20 +20,33 @@ export function ContractDetailPage() {
   const [contract, setContract] = useState<Contract | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    async function load() {
-      if (!id) return;
-      try {
-        setIsLoading(true);
-        setContract(await getContract(id));
-      } catch (error) {
-        toast.error("Chargement impossible", { description: getApiErrorMessage(error) });
-      } finally {
-        setIsLoading(false);
-      }
+  async function load() {
+    if (!id) return;
+    try {
+      setIsLoading(true);
+      setContract(await getContract(id));
+    } catch (error) {
+      toast.error("Chargement impossible", { description: getApiErrorMessage(error) });
+    } finally {
+      setIsLoading(false);
     }
-    void load();
-  }, [id]);
+  }
+
+  useEffect(() => { void load(); }, [id]);
+
+  async function run(action: "client" | "agency" | "archive" | "cancel") {
+    if (!contract) return;
+    try {
+      if (action === "client") await signContractClient(contract.id);
+      if (action === "agency") await signContractAgency(contract.id);
+      if (action === "archive") await archiveContract(contract.id);
+      if (action === "cancel") await cancelContract(contract.id);
+      toast.success("Contrat mis a jour");
+      await load();
+    } catch (error) {
+      toast.error("Action impossible", { description: getApiErrorMessage(error) });
+    }
+  }
 
   if (isLoading) return <PageContainer><PageSkeleton /></PageContainer>;
   if (!contract) return <PageContainer><EmptyState title="Contrat introuvable" description="Ce contrat n'est pas accessible." /></PageContainer>;
@@ -49,8 +62,8 @@ export function ContractDetailPage() {
         description={`Genere le ${date(contract.generatedAt)} pour ${client.firstName} ${client.lastName}.`}
         actions={
           <div className="flex flex-wrap gap-2">
-            <StatusBadge status={contract.pdfPath ? "ACTIVE" : "PENDING"} />
-            <Button type="button" disabled={!contract.pdfPath} onClick={() => downloadContractPdf(contract.id, contract.contractNumber)}><Download className="mr-2 h-4 w-4" /> Télécharger PDF</Button>
+            <StatusBadge status={contract.status} />
+            <Button type="button" disabled={!contract.pdfStorageKey} onClick={() => downloadContractPdf(contract.id, contract.contractNumber)}><Download className="mr-2 h-4 w-4" /> Télécharger PDF</Button>
           </div>
         }
       />
@@ -88,6 +101,15 @@ export function ContractDetailPage() {
           <div><dt className="text-muted-foreground">Paiement</dt><dd><StatusBadge status={contract.reservation.paymentStatus} /></dd></div>
           <div><dt className="text-muted-foreground">Reservation</dt><dd><Button asChild variant="outline"><Link to={`/reservations/${contract.reservationId}`}><FileText className="mr-2 h-4 w-4" /> Voir</Link></Button></dd></div>
         </dl>
+      </AppSection>
+
+      <AppSection className="rounded-lg border bg-card p-5" title="Signatures et archivage">
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" disabled={contract.signedByClient || contract.status === "ARCHIVED" || contract.status === "CANCELLED"} onClick={() => run("client")}><PenLine className="mr-2 h-4 w-4" /> Signer client</Button>
+          <Button type="button" variant="outline" disabled={contract.signedByAgency || contract.status === "ARCHIVED" || contract.status === "CANCELLED"} onClick={() => run("agency")}><PenLine className="mr-2 h-4 w-4" /> Signer agence</Button>
+          <Button type="button" variant="outline" disabled={contract.status === "ARCHIVED" || contract.status === "CANCELLED"} onClick={() => run("archive")}><Archive className="mr-2 h-4 w-4" /> Archiver</Button>
+          <Button type="button" variant="outline" disabled={contract.status === "CANCELLED"} onClick={() => run("cancel")}><Ban className="mr-2 h-4 w-4" /> Annuler</Button>
+        </div>
       </AppSection>
     </PageContainer>
   );

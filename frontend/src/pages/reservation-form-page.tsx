@@ -85,8 +85,13 @@ export function ReservationFormPage() {
   const selectedCar = useMemo(() => cars.find((car) => car.id === form.carId), [cars, form.carId]);
 
   useEffect(() => {
-    if (selectedCar && !form.dailyPrice) setForm((current) => ({ ...current, dailyPrice: Number(selectedCar.dailyPrice) }));
-  }, [selectedCar]);
+    if (!selectedCar || isEditing) return;
+    setForm((current) => ({
+      ...current,
+      dailyPrice: current.dailyPrice || Number(selectedCar.dailyPrice),
+      depositAmount: Number(selectedCar.defaultDeposit)
+    }));
+  }, [selectedCar, isEditing]);
 
   async function verifyAvailability() {
     if (!form.carId || !form.startDate || !form.endDate) {
@@ -129,7 +134,10 @@ export function ReservationFormPage() {
                 <option value="">Selectionner client</option>
                 {clients.map((client) => <option key={client.id} value={client.id}>{client.firstName} {client.lastName}</option>)}
               </select>
-              <select required className="h-10 rounded-md border bg-background px-3 text-sm" value={form.carId} onChange={(event) => setForm({ ...form, carId: event.target.value, dailyPrice: Number(cars.find((car) => car.id === event.target.value)?.dailyPrice ?? form.dailyPrice) })}>
+              <select required className="h-10 rounded-md border bg-background px-3 text-sm" value={form.carId} onChange={(event) => {
+                const car = cars.find((item) => item.id === event.target.value);
+                setForm({ ...form, carId: event.target.value, dailyPrice: Number(car?.dailyPrice ?? form.dailyPrice), depositAmount: Number(car?.defaultDeposit ?? form.depositAmount ?? 0) });
+              }}>
                 <option value="">Selectionner voiture</option>
                 {cars.map((car) => <option key={car.id} value={car.id}>{car.brand} {car.model} - {car.registrationNumber}</option>)}
               </select>

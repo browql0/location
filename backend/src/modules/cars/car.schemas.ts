@@ -28,7 +28,14 @@ export const createCarSchema = z.object({
   dailyPrice: money,
   weeklyPrice: money.default(0),
   monthlyPrice: money.default(0),
+  defaultDeposit: money.default(0),
   mileage: z.coerce.number().int().min(0).default(0),
+  currentMileage: z.coerce.number().int().min(0).optional(),
+  nextOilChangeKm: z.coerce.number().int().min(0).optional().nullable(),
+  nextTireChangeKm: z.coerce.number().int().min(0).optional().nullable(),
+  nextBrakeCheckKm: z.coerce.number().int().min(0).optional().nullable(),
+  nextInspectionKm: z.coerce.number().int().min(0).optional().nullable(),
+  nextMaintenanceKm: z.coerce.number().int().min(0).optional().nullable(),
   status: z.nativeEnum(CarStatus).default(CarStatus.AVAILABLE),
   insuranceExpiryDate: optionalDate,
   technicalVisitExpiryDate: optionalDate,
@@ -43,9 +50,7 @@ export const createCarPhotoSchema = z.object({
 });
 
 export const createCarDocumentSchema = z.object({
-  type: z.nativeEnum(DocumentType),
-  fileName: z.string().min(1).max(160),
-  fileUrl: z.string().url()
+  type: z.nativeEnum(DocumentType)
 });
 
 export type CarQueryInput = z.infer<typeof carQuerySchema>;

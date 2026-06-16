@@ -14,13 +14,17 @@ const envSchema = z.object({
   JWT_REFRESH_EXPIRES_IN: z.string().default("30d"),
   CORS_ORIGIN: z.string().default("http://localhost:5173,http://127.0.0.1:5173"),
   FRONTEND_APP_URL: z.string().url().default("http://localhost:5173"),
-  FILE_STORAGE_DRIVER: z.enum(["local", "r2"]).default("local"),
-  R2_ACCOUNT_ID: z.string().optional().default(""),
-  R2_ACCESS_KEY_ID: z.string().optional().default(""),
-  R2_SECRET_ACCESS_KEY: z.string().optional().default(""),
-  R2_BUCKET_NAME: z.string().optional().default(""),
-  R2_PUBLIC_URL: z.string().optional().default(""),
-  R2_ENDPOINT: z.string().optional().default("")
+  R2_ACCOUNT_ID: z.string().min(1),
+  R2_ACCESS_KEY_ID: z.string().min(1),
+  R2_SECRET_ACCESS_KEY: z.string().min(1),
+  R2_BUCKET_NAME: z.string().min(1),
+  R2_ENDPOINT: z.string().url(),
+  EMAIL_PROVIDER: z.enum(["mock", "smtp", "resend"]).default("mock"),
+  SMTP_HOST: z.string().optional().default(""),
+  SMTP_PORT: z.preprocess((value) => (value === "" ? undefined : value), z.coerce.number().int().positive().optional()),
+  SMTP_USER: z.string().optional().default(""),
+  SMTP_PASS: z.string().optional().default(""),
+  EMAIL_FROM: z.string().optional().default("")
 });
 
 export const env = envSchema.parse(process.env);

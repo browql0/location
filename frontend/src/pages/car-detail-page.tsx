@@ -1,7 +1,7 @@
 import axios from "axios";
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
-import { FileText, Image, Star, Trash2, Upload, Wrench } from "lucide-react";
+import { Link, useParams } from "react-router-dom";
+import { AlertTriangle, FileText, Image, Star, Trash2, Upload, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import {
   addCarDocument,
   deleteCarDocument,
   deleteCarPhoto,
+  downloadCarDocument,
   getCarPhotoObjectUrl,
   getCar,
   listCarPhotos,
@@ -26,6 +27,12 @@ import {
   type CarPhoto,
   type DocumentType
 } from "@/features/cars/cars-api";
+import {
+  listMaintenance,
+  listVehicleAnomalies,
+  type MaintenanceRecord,
+  type VehicleAnomaly
+} from "@/features/maintenance/maintenance-api";
 import { getApiErrorMessage } from "@/lib/api-error";
 import type { AuthUser, Permission } from "@/types/auth";
 
@@ -42,31 +49,41 @@ function formatMoney(value: string) {
   return `${Number(value).toLocaleString("fr-FR")} MAD`;
 }
 
+function formatKm(value: number | null | undefined) {
+  return typeof value === "number" ? `${value.toLocaleString("fr-FR")} km` : "-";
+}
+
 export function CarDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
   const [car, setCar] = useState<Car | null>(null);
   const [photos, setPhotos] = useState<CarPhoto[]>([]);
+  const [maintenanceRecords, setMaintenanceRecords] = useState<MaintenanceRecord[]>([]);
+  const [anomalies, setAnomalies] = useState<VehicleAnomaly[]>([]);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
-  const [documentForm, setDocumentForm] = useState<{ type: DocumentType; fileName: string; fileUrl: string }>({
-    type: "REGISTRATION",
-    fileName: "",
-    fileUrl: ""
-  });
+  const [documentType, setDocumentType] = useState<DocumentType>("REGISTRATION");
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
   const canUpdate = hasPermission(user, "cars:update");
+  const canReadMaintenance = hasPermission(user, "maintenance:read");
 
   async function load() {
     if (!id) return;
     try {
       setIsLoading(true);
-      const nextCar = await getCar(id);
+      const [nextCar, nextMaintenance, nextAnomalies] = await Promise.all([
+        getCar(id),
+        canReadMaintenance ? listMaintenance({ carId: id }) : Promise.resolve([]),
+        canReadMaintenance ? listVehicleAnomalies({ carId: id }) : Promise.resolve([])
+      ]);
       setCar(nextCar);
       setPhotos(nextCar.photos);
+      setMaintenanceRecords(nextMaintenance);
+      setAnomalies(nextAnomalies);
     } catch (error) {
       toast.error("Chargement impossible", { description: getApiErrorMessage(error) });
     } finally {
@@ -177,7 +194,9 @@ export function CarDetailPage() {
             <div className="flex justify-between"><span className="text-muted-foreground">Prix/jour</span><strong>{formatMoney(car.dailyPrice)}</strong></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Prix/semaine</span><strong>{formatMoney(car.weeklyPrice)}</strong></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Prix/mois</span><strong>{formatMoney(car.monthlyPrice)}</strong></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Caution par defaut</span><strong>{formatMoney(car.defaultDeposit)}</strong></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Kilometrage</span><strong>{car.mileage.toLocaleString("fr-FR")} km</strong></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Kilometrage actuel</span><strong>{formatKm(car.currentMileage)}</strong></div>
           </div>
           {canUpdate ? (
             <div className="mt-5 flex flex-wrap gap-2">
@@ -261,22 +280,23 @@ export function CarDetailPage() {
             onSubmit={async (event) => {
               event.preventDefault();
               try {
-                await addCarDocument(car.id, documentForm);
-                setDocumentForm({ type: "REGISTRATION", fileName: "", fileUrl: "" });
+                if (!documentFile) return;
+                await addCarDocument(car.id, { type: documentType, file: documentFile });
+                setDocumentType("REGISTRATION");
+                setDocumentFile(null);
                 await load();
               } catch (error) {
                 toast.error("Ajout document impossible", { description: getApiErrorMessage(error) });
               }
             }}
           >
-            <select className="h-10 rounded-md border bg-background px-3 text-sm" value={documentForm.type} onChange={(event) => setDocumentForm({ ...documentForm, type: event.target.value as DocumentType })}>
+            <select className="h-10 rounded-md border bg-background px-3 text-sm" value={documentType} onChange={(event) => setDocumentType(event.target.value as DocumentType)}>
               <option value="REGISTRATION">Carte grise</option>
               <option value="INSURANCE">Assurance</option>
               <option value="TECHNICAL_VISIT">Visite technique</option>
               <option value="OTHER">Autre</option>
             </select>
-            <Input required placeholder="Nom fichier" value={documentForm.fileName} onChange={(event) => setDocumentForm({ ...documentForm, fileName: event.target.value })} />
-            <Input required placeholder="URL fichier" value={documentForm.fileUrl} onChange={(event) => setDocumentForm({ ...documentForm, fileUrl: event.target.value })} />
+            <Input required type="file" accept="application/pdf,image/png,image/jpeg,image/jpg" onChange={(event) => setDocumentFile(event.target.files?.[0] ?? null)} />
             <Button type="submit"><FileText className="mr-2 h-4 w-4" /> Ajouter</Button>
           </form>
         ) : null}
@@ -288,7 +308,7 @@ export function CarDetailPage() {
                 <p className="text-sm text-muted-foreground">{document.type} - {formatDate(document.createdAt)}</p>
               </div>
               <div className="flex gap-2">
-                <Button asChild type="button" variant="outline"><a href={document.fileUrl} rel="noreferrer" target="_blank">Ouvrir</a></Button>
+                <Button type="button" variant="outline" onClick={() => downloadCarDocument(document)}>Telecharger</Button>
                 {canUpdate ? <Button type="button" variant="outline" onClick={async () => { await deleteCarDocument(document.id); await load(); }}>Supprimer</Button> : null}
               </div>
             </div>
@@ -297,8 +317,65 @@ export function CarDetailPage() {
         {car.documents.length === 0 ? <EmptyState title="Aucun document" description="Les documents vehicule seront stockes plus tard via R2/S3." /> : null}
       </AppSection>
 
-      <AppSection className="rounded-lg border bg-card p-5" title="Historique">
-        <EmptyState title="Historique futur" description="Les evenements de reservation, maintenance et kilometrage seront affiches ici dans les prochaines phases." />
+      <AppSection className="rounded-lg border bg-card p-5" title="Maintenance">
+        <div className="grid gap-3 md:grid-cols-4">
+          <div className="rounded-lg border bg-background p-4">
+            <p className="text-xs uppercase text-muted-foreground">Prochain entretien</p>
+            <p className="mt-1 text-lg font-semibold">{formatKm(car.nextMaintenanceKm)}</p>
+          </div>
+          <div className="rounded-lg border bg-background p-4">
+            <p className="text-xs uppercase text-muted-foreground">Prochaine vidange</p>
+            <p className="mt-1 text-lg font-semibold">{formatKm(car.nextOilChangeKm)}</p>
+          </div>
+          <div className="rounded-lg border bg-background p-4">
+            <p className="text-xs uppercase text-muted-foreground">Prochaine visite</p>
+            <p className="mt-1 text-lg font-semibold">{formatKm(car.nextInspectionKm)}</p>
+          </div>
+          <div className="rounded-lg border bg-background p-4">
+            <p className="text-xs uppercase text-muted-foreground">Anomalies ouvertes</p>
+            <p className="mt-1 text-lg font-semibold">{anomalies.filter((anomaly) => !anomaly.resolved).length}</p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-2">
+          <div>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold uppercase">Historique maintenance</h3>
+              {canReadMaintenance ? <Button asChild variant="outline"><Link to={`/maintenance/new?carId=${car.id}`}><Wrench className="mr-2 h-4 w-4" /> Planifier</Link></Button> : null}
+            </div>
+            <div className="divide-y rounded-md border">
+              {maintenanceRecords.slice(0, 6).map((record) => (
+                <Link className="flex items-center justify-between gap-3 p-3 hover:bg-muted/50" key={record.id} to={`/maintenance/${record.id}`}>
+                  <div>
+                    <p className="font-medium">{record.title}</p>
+                    <p className="text-sm text-muted-foreground">{record.type} - {formatDate(record.scheduledDate)}</p>
+                  </div>
+                  <StatusBadge status={record.status} />
+                </Link>
+              ))}
+            </div>
+            {maintenanceRecords.length === 0 ? <EmptyState title="Aucune maintenance" description="Les interventions planifiees et terminees apparaitront ici." /> : null}
+          </div>
+
+          <div>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold uppercase">Anomalies</h3>
+              {canReadMaintenance ? <Button asChild variant="outline"><Link to={`/vehicle-alerts?carId=${car.id}`}><AlertTriangle className="mr-2 h-4 w-4" /> Alertes</Link></Button> : null}
+            </div>
+            <div className="divide-y rounded-md border">
+              {anomalies.slice(0, 6).map((anomaly) => (
+                <div className="flex items-center justify-between gap-3 p-3" key={anomaly.id}>
+                  <div>
+                    <p className="font-medium">{anomaly.title}</p>
+                    <p className="text-sm text-muted-foreground">{anomaly.type} - {anomaly.resolved ? "Resolue" : "Ouverte"}</p>
+                  </div>
+                  <StatusBadge status={anomaly.severity} />
+                </div>
+              ))}
+            </div>
+            {anomalies.length === 0 ? <EmptyState title="Aucune anomalie" description="Les alertes kilometriques et documents expires apparaitront ici." /> : null}
+          </div>
+        </div>
       </AppSection>
     </PageContainer>
   );
