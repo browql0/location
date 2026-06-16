@@ -1,8 +1,10 @@
-import { AuditAction, InvoiceStatus, InvoiceType, ReservationStatus, UserRole } from "@prisma/client";
+import { AuditAction, InvoiceStatus, InvoiceType, Prisma, ReservationStatus, UserRole } from "@prisma/client";
 import { prisma } from "../../prisma/prisma.service.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import type { AuthContext } from "../../shared/types/auth.js";
-import type { Permission } from "../../shared/utils/permissions.js";
+import { assertPermissionOrOwner, canAccessAgency, requireAgencyScope } from "../../shared/utils/authz.js";
+import { formatDocumentNumber, nextSequenceValue } from "../../shared/utils/number-sequence.js";
+import { paginationArgs } from "../../shared/utils/pagination.js";
 import { createAuditLog } from "../audit/audit.service.js";
 import { FileStorageService } from "../files/file-storage.service.js";
 import { EmailService } from "./email.service.js";
@@ -17,38 +19,21 @@ const invoiceInclude = {
   subscription: { include: { agency: true, plan: true } }
 };
 
-function assertPermission(auth: AuthContext, permission: Permission) {
-  if (auth.role === UserRole.SUPER_ADMIN || auth.role === UserRole.AGENCY_ADMIN) return;
-  if (!auth.permissions.includes(permission)) throw new AppError("Insufficient permissions", 403, "INSUFFICIENT_PERMISSIONS");
-}
-
-function agencyScope(auth: AuthContext, requestedAgencyId?: string | null) {
-  if (auth.role === UserRole.SUPER_ADMIN) return requestedAgencyId ?? null;
-  if (!auth.agencyId) throw new AppError("Agency context is required", 403, "AGENCY_REQUIRED");
-  return auth.agencyId;
-}
-
 function assertCanMutateInvoice(invoice: { type: InvoiceType; agencyId: string | null }, auth: AuthContext) {
   if (auth.role === UserRole.SUPER_ADMIN) return;
   if (invoice.type === InvoiceType.SAAS_INVOICE) throw new AppError("SaaS invoices are read-only for agencies", 403, "SAAS_INVOICE_READ_ONLY");
-  assertPermission(auth, "invoices:update");
-  if (auth.agencyId !== invoice.agencyId) throw new AppError("Invoice not found", 404, "INVOICE_NOT_FOUND");
+  assertPermissionOrOwner(auth, "invoices:update");
+  if (!canAccessAgency(auth, invoice.agencyId)) throw new AppError("Invoice not found", 404, "INVOICE_NOT_FOUND");
 }
 
-async function nextInvoiceNumber(type: InvoiceType, year: number) {
-  const prefix = type === InvoiceType.SAAS_INVOICE ? `INV-SAA-${year}-` : `INV-LOC-${year}-`;
-  const latest = await prisma.invoice.findFirst({
-    where: { type, invoiceNumber: { startsWith: prefix } },
-    orderBy: { invoiceNumber: "desc" },
-    select: { invoiceNumber: true }
-  });
-  const next = latest ? Number(latest.invoiceNumber.replace(prefix, "")) + 1 : 1;
-  return `${prefix}${String(next).padStart(6, "0")}`;
+async function nextInvoiceNumber(tx: Prisma.TransactionClient, year: number) {
+  const next = await nextSequenceValue(tx, { scope: "GLOBAL", type: "INVOICE", year });
+  return formatDocumentNumber("INV", year, next);
 }
 
 async function getScopedInvoice(id: string, auth: AuthContext) {
-  assertPermission(auth, "invoices:read");
-  const agencyId = agencyScope(auth);
+  assertPermissionOrOwner(auth, "invoices:read");
+  const agencyId = requireAgencyScope(auth);
   const invoice = await prisma.invoice.findFirst({
     where: { id, ...(agencyId ? { OR: [{ agencyId }, { subscription: { agencyId } }] } : {}) },
     include: invoiceInclude
@@ -58,8 +43,8 @@ async function getScopedInvoice(id: string, auth: AuthContext) {
 }
 
 export async function listInvoices(query: InvoiceQueryInput, auth: AuthContext) {
-  assertPermission(auth, "invoices:read");
-  const agencyId = agencyScope(auth, query.agencyId);
+  assertPermissionOrOwner(auth, "invoices:read");
+  const agencyId = requireAgencyScope(auth, query.agencyId);
   return prisma.invoice.findMany({
     where: {
       ...(agencyId ? { OR: [{ agencyId }, { subscription: { agencyId } }] } : {}),
@@ -78,7 +63,8 @@ export async function listInvoices(query: InvoiceQueryInput, auth: AuthContext) 
         : {})
     },
     include: invoiceInclude,
-    orderBy: { issuedAt: "desc" }
+    orderBy: { issuedAt: "desc" },
+    ...paginationArgs(query)
   });
 }
 
@@ -87,31 +73,34 @@ export async function getInvoice(id: string, auth: AuthContext) {
 }
 
 export async function generateRentalInvoice(reservationId: string, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "invoices:create");
-  const agencyId = agencyScope(auth);
-  const reservation = await prisma.reservation.findFirst({
-    where: { id: reservationId, ...(agencyId ? { agencyId } : {}) },
-    include: { agency: true, client: true, car: true }
-  });
-  if (!reservation) throw new AppError("Reservation not found", 404, "RESERVATION_NOT_FOUND");
-  if (reservation.status === ReservationStatus.CANCELLED) throw new AppError("Cancelled reservations cannot be invoiced", 409, "RESERVATION_CANCELLED");
-  const existing = await prisma.invoice.findFirst({ where: { reservationId, type: InvoiceType.RENTAL_INVOICE, status: { not: InvoiceStatus.CANCELLED } } });
-  if (existing) throw new AppError("A rental invoice already exists for this reservation", 409, "INVOICE_ALREADY_EXISTS");
+  assertPermissionOrOwner(auth, "invoices:create");
+  const agencyId = requireAgencyScope(auth);
+  const invoice = await prisma.$transaction(async (tx) => {
+    const reservation = await tx.reservation.findFirst({
+      where: { id: reservationId, ...(agencyId ? { agencyId } : {}) },
+      include: { agency: true, client: true, car: true }
+    });
+    if (!reservation) throw new AppError("Reservation not found", 404, "RESERVATION_NOT_FOUND");
+    if (reservation.status === ReservationStatus.CANCELLED) throw new AppError("Cancelled reservations cannot be invoiced", 409, "RESERVATION_CANCELLED");
+    const existing = await tx.invoice.findFirst({ where: { reservationId, type: InvoiceType.RENTAL_INVOICE, status: { not: InvoiceStatus.CANCELLED } } });
+    if (existing) throw new AppError("A rental invoice already exists for this reservation", 409, "INVOICE_ALREADY_EXISTS");
 
-  const invoice = await prisma.invoice.create({
-    data: {
-      agencyId: reservation.agencyId,
-      reservationId: reservation.id,
-      type: InvoiceType.RENTAL_INVOICE,
-      invoiceNumber: await nextInvoiceNumber(InvoiceType.RENTAL_INVOICE, new Date().getFullYear()),
-      status: reservation.remainingAmount && Number(reservation.remainingAmount) > 0 ? InvoiceStatus.PARTIAL : InvoiceStatus.PAID,
-      totalAmount: reservation.totalAmount,
-      paidAmount: reservation.advanceAmount,
-      remainingAmount: reservation.remainingAmount,
-      currency: "MAD",
-      paidAt: Number(reservation.remainingAmount) <= 0 ? new Date() : null
-    },
-    include: invoiceInclude
+    const isPaid = reservation.remainingAmount.lte(0);
+    return tx.invoice.create({
+      data: {
+        agencyId: reservation.agencyId,
+        reservationId: reservation.id,
+        type: InvoiceType.RENTAL_INVOICE,
+        invoiceNumber: await nextInvoiceNumber(tx, new Date().getFullYear()),
+        status: isPaid ? InvoiceStatus.PAID : InvoiceStatus.PARTIAL,
+        totalAmount: reservation.totalAmount,
+        paidAmount: reservation.advanceAmount,
+        remainingAmount: reservation.remainingAmount,
+        currency: "MAD",
+        paidAt: isPaid ? new Date() : null
+      },
+      include: invoiceInclude
+    });
   });
   const pdfStorageKey = await generateInvoicePdf(invoice);
   const updated = await prisma.invoice.update({ where: { id: invoice.id }, data: { pdfStorageKey }, include: invoiceInclude });
@@ -121,32 +110,34 @@ export async function generateRentalInvoice(reservationId: string, auth: AuthCon
 
 export async function generateSaasInvoice(subscriptionId: string, auth: AuthContext, meta: RequestMeta) {
   if (auth.role !== UserRole.SUPER_ADMIN) throw new AppError("Super admin role is required", 403, "SUPER_ADMIN_REQUIRED");
-  const subscription = await prisma.subscription.findUnique({ where: { id: subscriptionId }, include: { agency: true, plan: true } });
-  if (!subscription) throw new AppError("Subscription not found", 404, "SUBSCRIPTION_NOT_FOUND");
-  const existing = await prisma.invoice.findFirst({
-    where: {
-      subscriptionId,
-      type: InvoiceType.SAAS_INVOICE,
-      status: { not: InvoiceStatus.CANCELLED },
-      issuedAt: { gte: subscription.startsAt, lte: subscription.endsAt }
-    }
-  });
-  if (existing) throw new AppError("A SaaS invoice already exists for this subscription period", 409, "INVOICE_ALREADY_EXISTS");
-  const amount = subscription.amount ?? (subscription.billingInterval === "YEARLY" ? subscription.plan.priceYearly ?? subscription.plan.priceMonthly : subscription.plan.priceMonthly);
-  const invoice = await prisma.invoice.create({
-    data: {
-      agencyId: subscription.agencyId,
-      subscriptionId: subscription.id,
-      type: InvoiceType.SAAS_INVOICE,
-      invoiceNumber: await nextInvoiceNumber(InvoiceType.SAAS_INVOICE, new Date().getFullYear()),
-      status: InvoiceStatus.ISSUED,
-      totalAmount: amount,
-      paidAmount: 0,
-      remainingAmount: amount,
-      currency: subscription.currency,
-      dueDate: subscription.endsAt
-    },
-    include: invoiceInclude
+  const invoice = await prisma.$transaction(async (tx) => {
+    const subscription = await tx.subscription.findUnique({ where: { id: subscriptionId }, include: { agency: true, plan: true } });
+    if (!subscription) throw new AppError("Subscription not found", 404, "SUBSCRIPTION_NOT_FOUND");
+    const existing = await tx.invoice.findFirst({
+      where: {
+        subscriptionId,
+        type: InvoiceType.SAAS_INVOICE,
+        status: { not: InvoiceStatus.CANCELLED },
+        issuedAt: { gte: subscription.startsAt, lte: subscription.endsAt }
+      }
+    });
+    if (existing) throw new AppError("A SaaS invoice already exists for this subscription period", 409, "INVOICE_ALREADY_EXISTS");
+    const amount = subscription.amount ?? (subscription.billingInterval === "YEARLY" ? subscription.plan.priceYearly ?? subscription.plan.priceMonthly : subscription.plan.priceMonthly);
+    return tx.invoice.create({
+      data: {
+        agencyId: subscription.agencyId,
+        subscriptionId: subscription.id,
+        type: InvoiceType.SAAS_INVOICE,
+        invoiceNumber: await nextInvoiceNumber(tx, new Date().getFullYear()),
+        status: InvoiceStatus.ISSUED,
+        totalAmount: amount,
+        paidAmount: 0,
+        remainingAmount: amount,
+        currency: subscription.currency,
+        dueDate: subscription.endsAt
+      },
+      include: invoiceInclude
+    });
   });
   const pdfStorageKey = await generateInvoicePdf(invoice);
   const updated = await prisma.invoice.update({ where: { id: invoice.id }, data: { pdfStorageKey }, include: invoiceInclude });

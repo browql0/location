@@ -1,5 +1,6 @@
 import { ClientDocumentType } from "@prisma/client";
 import { z } from "zod";
+import { paginationQueryFields } from "../../shared/utils/pagination.js";
 
 const emptyToNull = (schema: z.ZodString) =>
   z
@@ -17,7 +18,8 @@ export const clientQuerySchema = z.object({
   search: z.string().trim().optional(),
   city: z.string().trim().optional(),
   hasCin: z.coerce.boolean().optional(),
-  hasDrivingLicense: z.coerce.boolean().optional()
+  hasDrivingLicense: z.coerce.boolean().optional(),
+  ...paginationQueryFields
 });
 
 export const createClientSchema = z.object({

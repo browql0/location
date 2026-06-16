@@ -388,6 +388,7 @@ model User {
   @@index([agencyId])
   @@index([role])
   @@index([status])
+  @@index([agencyId, status, createdAt])
 }
 
 model RefreshToken {
@@ -420,6 +421,19 @@ model UserSession {
   @@index([tokenFamily])
   @@index([expiresAt])
   @@index([revokedAt])
+}
+
+model NumberSequence {
+  id           String   @id @default(cuid())
+  scope        String
+  type         String
+  year         Int
+  currentValue Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([scope, type, year])
+  @@index([type, year])
 }
 
 model Car {
@@ -468,6 +482,7 @@ model Car {
   @@index([status])
   @@index([registrationNumber])
   @@index([createdAt])
+  @@index([agencyId, status, createdAt])
 }
 
 model CarPhoto {
@@ -537,6 +552,7 @@ model Client {
   @@index([cinOrPassport])
   @@index([drivingLicense])
   @@index([normalizedIdentity])
+  @@index([agencyId, createdAt])
 }
 
 model ClientDocument {
@@ -621,6 +637,9 @@ model Reservation {
   @@index([status])
   @@index([startDate, endDate])
   @@index([carId, startDate, endDate, status])
+  @@index([agencyId, status, startDate])
+  @@index([agencyId, paymentStatus, startDate])
+  @@index([agencyId, createdAt])
 }
 
 model Contract {
@@ -644,6 +663,7 @@ model Contract {
   @@unique([agencyId, contractNumber])
   @@index([agencyId])
   @@index([status])
+  @@index([agencyId, status, generatedAt])
 }
 
 model Invoice {
@@ -679,6 +699,8 @@ model Invoice {
   @@index([type])
   @@index([status])
   @@index([issuedAt])
+  @@index([agencyId, status, issuedAt])
+  @@index([agencyId, type, issuedAt])
 }
 
 model Payment {
@@ -768,6 +790,8 @@ model MaintenanceRecord {
   @@index([scheduledDate])
   @@index([status])
   @@index([type])
+  @@index([agencyId, status, scheduledDate])
+  @@index([agencyId, carId, scheduledDate])
 }
 
 model MaintenanceDocument {

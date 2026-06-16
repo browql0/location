@@ -1,8 +1,9 @@
-import { AuditAction, UserRole } from "@prisma/client";
+import { AuditAction } from "@prisma/client";
 import { prisma } from "../../prisma/prisma.service.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import type { AuthContext } from "../../shared/types/auth.js";
-import type { Permission } from "../../shared/utils/permissions.js";
+import { assertPermissionOrOwner, assertSameAgency, requireAgencyForCreate, requireAgencyScope } from "../../shared/utils/authz.js";
+import { paginationArgs } from "../../shared/utils/pagination.js";
 import { createAuditLog } from "../audit/audit.service.js";
 import { FileStorageService } from "../files/file-storage.service.js";
 import { PlanLimitService } from "../subscriptions/plan-limit.service.js";
@@ -17,26 +18,6 @@ const clientInclude = {
   agency: { select: { id: true, name: true } },
   documents: { orderBy: { createdAt: "desc" as const } }
 };
-
-function assertPermission(auth: AuthContext, permission: Permission) {
-  if (auth.role === UserRole.SUPER_ADMIN || auth.role === UserRole.AGENCY_ADMIN) return;
-  if (!auth.permissions.includes(permission)) throw new AppError("Insufficient permissions", 403, "INSUFFICIENT_PERMISSIONS");
-}
-
-function agencyScope(auth: AuthContext, requestedAgencyId?: string | null) {
-  if (auth.role === UserRole.SUPER_ADMIN) return requestedAgencyId ?? null;
-  if (!auth.agencyId) throw new AppError("Agency context is required", 403, "AGENCY_REQUIRED");
-  return auth.agencyId;
-}
-
-function createAgencyId(auth: AuthContext, requestedAgencyId?: string | null) {
-  if (auth.role === UserRole.SUPER_ADMIN) {
-    if (!requestedAgencyId) throw new AppError("Agency is required", 400, "CLIENT_AGENCY_REQUIRED");
-    return requestedAgencyId;
-  }
-  if (!auth.agencyId) throw new AppError("Agency context is required", 403, "AGENCY_REQUIRED");
-  return auth.agencyId;
-}
 
 function cleanIdentity(value: string | null | undefined, uppercase = true) {
   if (!value) return null;
@@ -60,7 +41,7 @@ export function normalizeClientIdentity(client: {
 }
 
 async function getScopedClient(id: string, auth: AuthContext) {
-  const agencyId = agencyScope(auth);
+  const agencyId = requireAgencyScope(auth);
   const client = await prisma.client.findFirst({
     where: { id, deletedAt: null, ...(agencyId ? { agencyId } : {}) },
     include: clientInclude
@@ -72,8 +53,7 @@ async function getScopedClient(id: string, auth: AuthContext) {
 async function getScopedDocument(documentId: string, auth: AuthContext) {
   const document = await prisma.clientDocument.findUnique({ where: { id: documentId }, include: { client: true } });
   if (!document || document.client.deletedAt) throw new AppError("Client document not found", 404, "CLIENT_DOCUMENT_NOT_FOUND");
-  const agencyId = agencyScope(auth);
-  if (agencyId && document.client.agencyId !== agencyId) throw new AppError("Client document not found", 404, "CLIENT_DOCUMENT_NOT_FOUND");
+  assertSameAgency(document.client.agencyId, auth, "CLIENT_DOCUMENT_NOT_FOUND");
   return document;
 }
 
@@ -82,8 +62,8 @@ function clientName(client: { firstName: string; lastName: string }) {
 }
 
 export async function listClients(query: ClientQueryInput, auth: AuthContext) {
-  assertPermission(auth, "clients:read");
-  const agencyId = agencyScope(auth, query.agencyId);
+  assertPermissionOrOwner(auth, "clients:read");
+  const agencyId = requireAgencyScope(auth, query.agencyId);
   return prisma.client.findMany({
     where: {
       deletedAt: null,
@@ -107,13 +87,14 @@ export async function listClients(query: ClientQueryInput, auth: AuthContext) {
         : {})
     },
     include: clientInclude,
-    orderBy: { createdAt: "desc" }
+    orderBy: { createdAt: "desc" },
+    ...paginationArgs(query)
   });
 }
 
 export async function createClient(input: CreateClientInput, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "clients:create");
-  const agencyId = createAgencyId(auth, input.agencyId);
+  assertPermissionOrOwner(auth, "clients:create");
+  const agencyId = requireAgencyForCreate(auth, input.agencyId, "CLIENT_AGENCY_REQUIRED");
   await PlanLimitService.assertCanCreateClient(agencyId);
   const normalizedIdentity = normalizeClientIdentity(input);
 
@@ -135,12 +116,12 @@ export async function createClient(input: CreateClientInput, auth: AuthContext, 
 }
 
 export async function getClient(id: string, auth: AuthContext) {
-  assertPermission(auth, "clients:read");
+  assertPermissionOrOwner(auth, "clients:read");
   return getScopedClient(id, auth);
 }
 
 export async function getClientSummary(id: string, auth: AuthContext) {
-  assertPermission(auth, "clients:read");
+  assertPermissionOrOwner(auth, "clients:read");
   const client = await getScopedClient(id, auth);
   return {
     clientId: client.id,
@@ -159,7 +140,7 @@ export async function getClientSummary(id: string, auth: AuthContext) {
 }
 
 export async function updateClient(id: string, input: UpdateClientInput, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "clients:update");
+  assertPermissionOrOwner(auth, "clients:update");
   const current = await getScopedClient(id, auth);
   const normalizedIdentity = normalizeClientIdentity({ ...current, ...input });
   const updated = await prisma.client.update({
@@ -181,7 +162,7 @@ export async function updateClient(id: string, input: UpdateClientInput, auth: A
 }
 
 export async function softDeleteClient(id: string, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "clients:delete");
+  assertPermissionOrOwner(auth, "clients:delete");
   const current = await getScopedClient(id, auth);
   const updated = await prisma.client.update({ where: { id }, data: { deletedAt: new Date() }, include: clientInclude });
   await createAuditLog({
@@ -197,13 +178,13 @@ export async function softDeleteClient(id: string, auth: AuthContext, meta: Requ
 }
 
 export async function listDocuments(clientId: string, auth: AuthContext) {
-  assertPermission(auth, "clients:read");
+  assertPermissionOrOwner(auth, "clients:read");
   await getScopedClient(clientId, auth);
   return prisma.clientDocument.findMany({ where: { clientId }, orderBy: { createdAt: "desc" } });
 }
 
 export async function addDocument(clientId: string, input: CreateClientDocumentInput, file: Express.Multer.File | undefined, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "clients:update");
+  assertPermissionOrOwner(auth, "clients:update");
   const client = await getScopedClient(clientId, auth);
   if (!file) throw new AppError("File is required", 400, "CLIENT_DOCUMENT_FILE_REQUIRED");
 
@@ -232,7 +213,7 @@ export async function addDocument(clientId: string, input: CreateClientDocumentI
 }
 
 export async function getDocumentDownload(documentId: string, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "clients:read");
+  assertPermissionOrOwner(auth, "clients:read");
   const document = await getScopedDocument(documentId, auth);
   const stream = await FileStorageService.getFileStream(document.storageKey);
   await createAuditLog({
@@ -248,7 +229,7 @@ export async function getDocumentDownload(documentId: string, auth: AuthContext,
 }
 
 export async function deleteDocument(documentId: string, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "clients:update");
+  assertPermissionOrOwner(auth, "clients:update");
   const document = await getScopedDocument(documentId, auth);
   const deleted = await prisma.clientDocument.delete({ where: { id: documentId } });
   try {
@@ -269,7 +250,7 @@ export async function deleteDocument(documentId: string, auth: AuthContext, meta
 }
 
 export async function riskCheck(identity: string, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "clients:read");
+  assertPermissionOrOwner(auth, "clients:read");
   const normalizedIdentity = cleanIdentity(identity) ?? "";
   const profile = normalizedIdentity
     ? await prisma.clientRiskProfile.findUnique({ where: { normalizedIdentity } })
@@ -278,7 +259,7 @@ export async function riskCheck(identity: string, auth: AuthContext, meta: Reque
     action: AuditAction.VALIDATE,
     entity: "ClientRiskProfile",
     userId: auth.userId,
-    agencyId: agencyScope(auth),
+    agencyId: requireAgencyScope(auth),
     metadata: { event: "client_risk_checked", normalizedIdentity },
     ...meta
   });

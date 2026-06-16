@@ -2,6 +2,7 @@ import { AgencyStatus, AuditAction, BillingInterval, SubscriptionStatus, UserRol
 import { prisma } from "../../prisma/prisma.service.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import type { AuthContext } from "../../shared/types/auth.js";
+import { isSuperAdmin, requireAgencyScope } from "../../shared/utils/authz.js";
 import { createAuditLog } from "../audit/audit.service.js";
 import type { ChangePlanInput, SubscriptionQueryInput } from "./subscription.schemas.js";
 
@@ -18,7 +19,7 @@ function assertCanRead(auth: AuthContext, agencyId?: string | null) {
 }
 
 function assertSuperAdmin(auth: AuthContext) {
-  if (auth.role !== UserRole.SUPER_ADMIN) {
+  if (!isSuperAdmin(auth)) {
     throw new AppError("Super admin role is required", 403, "SUPER_ADMIN_REQUIRED");
   }
 }
@@ -30,10 +31,10 @@ const subscriptionInclude = {
 
 export async function listSubscriptions(query: SubscriptionQueryInput, auth: AuthContext) {
   assertCanRead(auth, query.agencyId);
+  const agencyId = requireAgencyScope(auth, query.agencyId);
   return prisma.subscription.findMany({
     where: {
-      ...(auth.role === UserRole.SUPER_ADMIN ? {} : { agencyId: auth.agencyId ?? "" }),
-      ...(query.agencyId ? { agencyId: query.agencyId } : {}),
+      ...(agencyId ? { agencyId } : {}),
       ...(query.status ? { status: query.status } : {})
     },
     include: subscriptionInclude,

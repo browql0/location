@@ -1,6 +1,7 @@
 import { UserRole, UserStatus } from "@prisma/client";
 import { z } from "zod";
 import { permissions } from "../../shared/utils/permissions.js";
+import { paginationQueryFields } from "../../shared/utils/pagination.js";
 
 const permissionSchema = z.enum(permissions);
 
@@ -8,7 +9,8 @@ export const userQuerySchema = z.object({
   agencyId: z.string().optional(),
   search: z.string().optional(),
   role: z.nativeEnum(UserRole).optional(),
-  status: z.nativeEnum(UserStatus).optional()
+  status: z.nativeEnum(UserStatus).optional(),
+  ...paginationQueryFields
 });
 
 export const createUserSchema = z.object({

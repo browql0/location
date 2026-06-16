@@ -1,5 +1,6 @@
 import { PaymentStatus, ReservationStatus } from "@prisma/client";
 import { z } from "zod";
+import { paginationQueryFields } from "../../shared/utils/pagination.js";
 
 const dateField = z.union([z.string().datetime(), z.string().date()]).transform((value) => new Date(value));
 const money = z.coerce.number().min(0);
@@ -18,7 +19,8 @@ export const reservationQuerySchema = z.object({
   search: z.string().trim().optional(),
   status: z.nativeEnum(ReservationStatus).optional(),
   paymentStatus: z.nativeEnum(PaymentStatus).optional(),
-  date: z.string().date().optional()
+  date: z.string().date().optional(),
+  ...paginationQueryFields
 });
 
 export const createReservationSchema = z

@@ -3,7 +3,8 @@ import { AgencyStatus, AuditAction, SubscriptionStatus, UserRole, UserStatus } f
 import { prisma } from "../../prisma/prisma.service.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import type { AuthContext } from "../../shared/types/auth.js";
-import type { Permission } from "../../shared/utils/permissions.js";
+import { assertPermissionOrOwner, canAccessAgency, isSuperAdmin, requireAgencyScope } from "../../shared/utils/authz.js";
+import { paginationArgs } from "../../shared/utils/pagination.js";
 import { createAuditLog } from "../audit/audit.service.js";
 import type { CreateUserInput, UpdatePermissionsInput, UpdateUserInput, UserQueryInput } from "./user.schemas.js";
 
@@ -29,15 +30,6 @@ const publicUserSelect = {
   deletedAt: true
 };
 
-function has(auth: AuthContext, permission: Permission) {
-  return auth.permissions.includes(permission);
-}
-
-function assertPermission(auth: AuthContext, permission: Permission) {
-  if (auth.role === UserRole.SUPER_ADMIN || auth.role === UserRole.AGENCY_ADMIN) return;
-  if (!has(auth, permission)) throw new AppError("Insufficient permissions", 403, "INSUFFICIENT_PERMISSIONS");
-}
-
 async function assertAgencyOperational(agencyId: string) {
   const agency = await prisma.agency.findUnique({
     where: { id: agencyId },
@@ -52,9 +44,7 @@ async function assertAgencyOperational(agencyId: string) {
 }
 
 function scopedAgencyId(auth: AuthContext, requestedAgencyId?: string | null) {
-  if (auth.role === UserRole.SUPER_ADMIN) return requestedAgencyId ?? null;
-  if (!auth.agencyId) throw new AppError("Agency context is required", 403, "AGENCY_REQUIRED");
-  return auth.agencyId;
+  return requireAgencyScope(auth, requestedAgencyId);
 }
 
 function resolveCreateAgencyId(auth: AuthContext, input: CreateUserInput) {
@@ -83,8 +73,8 @@ async function getTargetUser(id: string) {
 }
 
 function assertCanAccessTarget(auth: AuthContext, target: { id: string; agencyId: string | null; role: UserRole }) {
-  if (auth.role === UserRole.SUPER_ADMIN) return;
-  if (!auth.agencyId || target.agencyId !== auth.agencyId) {
+  if (isSuperAdmin(auth)) return;
+  if (!canAccessAgency(auth, target.agencyId)) {
     throw new AppError("User is outside agency scope", 403, "USER_SCOPE_FORBIDDEN");
   }
   if (target.role !== UserRole.STAFF) {
@@ -93,14 +83,14 @@ function assertCanAccessTarget(auth: AuthContext, target: { id: string; agencyId
 }
 
 function assertCanCreateRole(auth: AuthContext, input: CreateUserInput) {
-  if (auth.role === UserRole.SUPER_ADMIN) return;
+  if (isSuperAdmin(auth)) return;
   if (input.role !== UserRole.STAFF) {
     throw new AppError("Agency admins can only create staff users", 403, "STAFF_ONLY");
   }
 }
 
 export async function listUsers(query: UserQueryInput, auth: AuthContext) {
-  assertPermission(auth, "users:read");
+  assertPermissionOrOwner(auth, "users:read");
   const agencyId = scopedAgencyId(auth, query.agencyId);
   return prisma.user.findMany({
     where: {
@@ -119,12 +109,13 @@ export async function listUsers(query: UserQueryInput, auth: AuthContext) {
         : {})
     },
     select: publicUserSelect,
-    orderBy: { createdAt: "desc" }
+    orderBy: { createdAt: "desc" },
+    ...paginationArgs(query)
   });
 }
 
 export async function createUser(input: CreateUserInput, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "users:create");
+  assertPermissionOrOwner(auth, "users:create");
   assertCanCreateRole(auth, input);
 
   const agencyId = resolveCreateAgencyId(auth, input);
@@ -161,14 +152,14 @@ export async function createUser(input: CreateUserInput, auth: AuthContext, meta
 }
 
 export async function getUser(id: string, auth: AuthContext) {
-  assertPermission(auth, "users:read");
+  assertPermissionOrOwner(auth, "users:read");
   const user = await getTargetUser(id);
   assertCanAccessTarget(auth, user);
   return user;
 }
 
 export async function updateUser(id: string, input: UpdateUserInput, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "users:update");
+  assertPermissionOrOwner(auth, "users:update");
   const target = await getTargetUser(id);
   assertCanAccessTarget(auth, target);
 
@@ -208,7 +199,7 @@ export async function updateUser(id: string, input: UpdateUserInput, auth: AuthC
 }
 
 export async function setUserStatus(id: string, status: typeof UserStatus.ACTIVE | typeof UserStatus.SUSPENDED, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, status === UserStatus.ACTIVE ? "users:enable" : "users:disable");
+  assertPermissionOrOwner(auth, status === UserStatus.ACTIVE ? "users:enable" : "users:disable");
   const target = await getTargetUser(id);
   assertCanAccessTarget(auth, target);
   if (id === auth.userId) throw new AppError("Cannot change your own status", 403, "SELF_STATUS_FORBIDDEN");
@@ -233,7 +224,7 @@ export async function setUserStatus(id: string, status: typeof UserStatus.ACTIVE
 }
 
 export async function updatePermissions(id: string, input: UpdatePermissionsInput, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "users:permissions");
+  assertPermissionOrOwner(auth, "users:permissions");
   const target = await getTargetUser(id);
   assertCanAccessTarget(auth, target);
   if (target.role !== UserRole.STAFF) throw new AppError("Only staff permissions can be edited", 403, "STAFF_ONLY");
@@ -259,7 +250,7 @@ export async function updatePermissions(id: string, input: UpdatePermissionsInpu
 }
 
 export async function softDeleteUser(id: string, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "users:delete");
+  assertPermissionOrOwner(auth, "users:delete");
   const target = await getTargetUser(id);
   assertCanAccessTarget(auth, target);
   if (id === auth.userId) throw new AppError("Cannot delete your own account", 403, "SELF_DELETE_FORBIDDEN");

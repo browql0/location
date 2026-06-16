@@ -553,8 +553,8 @@ export async function getAgencyDashboard(auth: AuthContext) {
     maintenance,
     reservationsToday,
     reservationsMonth,
-    revenueMonthRows,
-    revenueYearRows,
+    revenueMonthAggregate,
+    revenueYearAggregate,
     activeClients,
     upcomingReservations,
     contractsToSign,
@@ -577,8 +577,8 @@ export async function getAgencyDashboard(auth: AuthContext) {
     prisma.car.count({ where: { agencyId, deletedAt: null, status: CarStatus.MAINTENANCE } }),
     prisma.reservation.count({ where: { agencyId, startDate: { lt: todayEnd }, endDate: { gt: todayStart }, status: { in: activeReservationStatuses } } }),
     prisma.reservation.count({ where: { agencyId, startDate: { gte: monthStart, lt: nextMonthStart }, status: { not: ReservationStatus.CANCELLED } } }),
-    prisma.reservation.findMany({ where: { agencyId, startDate: { gte: monthStart, lt: nextMonthStart }, status: { in: revenueReservationStatuses } }, select: { totalAmount: true } }),
-    prisma.reservation.findMany({ where: { agencyId, startDate: { gte: yearStart, lt: nextYearStart }, status: { in: revenueReservationStatuses } }, select: { totalAmount: true } }),
+    prisma.reservation.aggregate({ where: { agencyId, startDate: { gte: monthStart, lt: nextMonthStart }, status: { in: revenueReservationStatuses } }, _sum: { totalAmount: true } }),
+    prisma.reservation.aggregate({ where: { agencyId, startDate: { gte: yearStart, lt: nextYearStart }, status: { in: revenueReservationStatuses } }, _sum: { totalAmount: true } }),
     prisma.client.count({ where: { agencyId, deletedAt: null, reservations: { some: { status: { in: activeReservationStatuses } } } } }),
     prisma.reservation.findMany({
       where: { agencyId, startDate: { gte: todayStart }, status: ReservationStatus.CONFIRMED },
@@ -621,8 +621,8 @@ export async function getAgencyDashboard(auth: AuthContext) {
     select: { id: true, brand: true, model: true, registrationNumber: true }
   });
   const carsById = new Map(cars.map((car) => [car.id, car]));
-  const revenueMonth = revenueMonthRows.reduce((sum, reservation) => sum + Number(reservation.totalAmount), 0);
-  const revenueYear = revenueYearRows.reduce((sum, reservation) => sum + Number(reservation.totalAmount), 0);
+  const revenueMonth = Number(revenueMonthAggregate._sum.totalAmount ?? 0);
+  const revenueYear = Number(revenueYearAggregate._sum.totalAmount ?? 0);
   const [rentalInvoicesIssued, rentalInvoiceSums] = await Promise.all([
     prisma.invoice.count({ where: { agencyId, type: InvoiceType.RENTAL_INVOICE, status: { not: InvoiceStatus.CANCELLED } } }),
     prisma.invoice.aggregate({

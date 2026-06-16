@@ -1,8 +1,9 @@
-import { AuditAction, CarStatus, UserRole } from "@prisma/client";
+import { AuditAction, CarStatus } from "@prisma/client";
 import { prisma } from "../../prisma/prisma.service.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import type { AuthContext } from "../../shared/types/auth.js";
-import type { Permission } from "../../shared/utils/permissions.js";
+import { assertPermissionOrOwner, assertSameAgency, requireAgencyForCreate, requireAgencyScope } from "../../shared/utils/authz.js";
+import { paginationArgs } from "../../shared/utils/pagination.js";
 import { createAuditLog } from "../audit/audit.service.js";
 import { FileStorageService } from "../files/file-storage.service.js";
 import { PlanLimitService } from "../subscriptions/plan-limit.service.js";
@@ -19,28 +20,8 @@ const carInclude = {
   documents: { orderBy: { createdAt: "desc" as const } }
 };
 
-function assertPermission(auth: AuthContext, permission: Permission) {
-  if (auth.role === UserRole.SUPER_ADMIN || auth.role === UserRole.AGENCY_ADMIN) return;
-  if (!auth.permissions.includes(permission)) throw new AppError("Insufficient permissions", 403, "INSUFFICIENT_PERMISSIONS");
-}
-
-function agencyScope(auth: AuthContext, requestedAgencyId?: string | null) {
-  if (auth.role === UserRole.SUPER_ADMIN) return requestedAgencyId ?? null;
-  if (!auth.agencyId) throw new AppError("Agency context is required", 403, "AGENCY_REQUIRED");
-  return auth.agencyId;
-}
-
-function createAgencyId(auth: AuthContext, requestedAgencyId?: string | null) {
-  if (auth.role === UserRole.SUPER_ADMIN) {
-    if (!requestedAgencyId) throw new AppError("Agency is required", 400, "CAR_AGENCY_REQUIRED");
-    return requestedAgencyId;
-  }
-  if (!auth.agencyId) throw new AppError("Agency context is required", 403, "AGENCY_REQUIRED");
-  return auth.agencyId;
-}
-
 async function getScopedCar(id: string, auth: AuthContext) {
-  const agencyId = agencyScope(auth);
+  const agencyId = requireAgencyScope(auth);
   const car = await prisma.car.findFirst({
     where: { id, deletedAt: null, ...(agencyId ? { agencyId } : {}) },
     include: carInclude
@@ -52,8 +33,7 @@ async function getScopedCar(id: string, auth: AuthContext) {
 async function getScopedPhoto(photoId: string, auth: AuthContext) {
   const photo = await prisma.carPhoto.findUnique({ where: { id: photoId }, include: { car: true } });
   if (!photo || photo.car.deletedAt) throw new AppError("Car photo not found", 404, "CAR_PHOTO_NOT_FOUND");
-  const agencyId = agencyScope(auth);
-  if (agencyId && photo.car.agencyId !== agencyId) throw new AppError("Car photo not found", 404, "CAR_PHOTO_NOT_FOUND");
+  assertSameAgency(photo.car.agencyId, auth, "CAR_PHOTO_NOT_FOUND");
   return photo;
 }
 
@@ -79,8 +59,8 @@ async function assertUniqueCar(input: { agencyId: string; registrationNumber?: s
 }
 
 export async function listCars(query: CarQueryInput, auth: AuthContext) {
-  assertPermission(auth, "cars:read");
-  const agencyId = agencyScope(auth, query.agencyId);
+  assertPermissionOrOwner(auth, "cars:read");
+  const agencyId = requireAgencyScope(auth, query.agencyId);
   return prisma.car.findMany({
     where: {
       deletedAt: null,
@@ -97,13 +77,14 @@ export async function listCars(query: CarQueryInput, auth: AuthContext) {
         : {})
     },
     include: carInclude,
-    orderBy: { createdAt: "desc" }
+    orderBy: { createdAt: "desc" },
+    ...paginationArgs(query)
   });
 }
 
 export async function createCar(input: CreateCarInput, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "cars:create");
-  const agencyId = createAgencyId(auth, input.agencyId);
+  assertPermissionOrOwner(auth, "cars:create");
+  const agencyId = requireAgencyForCreate(auth, input.agencyId, "CAR_AGENCY_REQUIRED");
   await PlanLimitService.assertCanCreateCar(agencyId);
   await assertUniqueCar({ agencyId, registrationNumber: input.registrationNumber, vin: input.vin });
 
@@ -151,12 +132,12 @@ export async function createCar(input: CreateCarInput, auth: AuthContext, meta: 
 }
 
 export async function getCar(id: string, auth: AuthContext) {
-  assertPermission(auth, "cars:read");
+  assertPermissionOrOwner(auth, "cars:read");
   return getScopedCar(id, auth);
 }
 
 export async function updateCar(id: string, input: UpdateCarInput, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "cars:update");
+  assertPermissionOrOwner(auth, "cars:update");
   const current = await getScopedCar(id, auth);
   await assertUniqueCar({ agencyId: current.agencyId, registrationNumber: input.registrationNumber, vin: input.vin }, id);
 
@@ -221,7 +202,7 @@ export async function updateCar(id: string, input: UpdateCarInput, auth: AuthCon
 }
 
 export async function softDeleteCar(id: string, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "cars:delete");
+  assertPermissionOrOwner(auth, "cars:delete");
   const current = await getScopedCar(id, auth);
   const updated = await prisma.car.update({
     where: { id },
@@ -247,7 +228,7 @@ export async function softDeleteCar(id: string, auth: AuthContext, meta: Request
 }
 
 export async function setCarStatus(id: string, status: CarStatus, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "cars:update");
+  assertPermissionOrOwner(auth, "cars:update");
   const current = await getScopedCar(id, auth);
   const updated = await prisma.car.update({ where: { id }, data: { status }, include: carInclude });
   await createAuditLog({
@@ -269,13 +250,13 @@ export async function setCarStatus(id: string, status: CarStatus, auth: AuthCont
 }
 
 export async function listPhotos(carId: string, auth: AuthContext) {
-  assertPermission(auth, "cars:read");
+  assertPermissionOrOwner(auth, "cars:read");
   await getScopedCar(carId, auth);
   return prisma.carPhoto.findMany({ where: { carId }, orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] });
 }
 
 export async function addPhoto(carId: string, file: Express.Multer.File | undefined, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "cars:update");
+  assertPermissionOrOwner(auth, "cars:update");
   const car = await getScopedCar(carId, auth);
   if (!file) throw new AppError("File is required", 400, "CAR_PHOTO_FILE_REQUIRED");
   const shouldBePrimary = car.photos.length === 0;
@@ -306,7 +287,7 @@ export async function addPhoto(carId: string, file: Express.Multer.File | undefi
 }
 
 export async function deletePhoto(id: string, auth: AuthContext) {
-  assertPermission(auth, "cars:update");
+  assertPermissionOrOwner(auth, "cars:update");
   const photo = await getScopedPhoto(id, auth);
   const deleted = await prisma.carPhoto.delete({ where: { id } });
   if (photo.storageKey) {
@@ -320,21 +301,21 @@ export async function deletePhoto(id: string, auth: AuthContext) {
 }
 
 export async function setPrimaryPhoto(id: string, auth: AuthContext) {
-  assertPermission(auth, "cars:update");
+  assertPermissionOrOwner(auth, "cars:update");
   const photo = await getScopedPhoto(id, auth);
   await prisma.carPhoto.updateMany({ where: { carId: photo.carId }, data: { isPrimary: false } });
   return prisma.carPhoto.update({ where: { id }, data: { isPrimary: true } });
 }
 
 export async function getPhotoDownload(id: string, auth: AuthContext) {
-  assertPermission(auth, "cars:read");
+  assertPermissionOrOwner(auth, "cars:read");
   const photo = await getScopedPhoto(id, auth);
   if (!photo.storageKey) return { photo, stream: null };
   return { photo, stream: await FileStorageService.getFileStream(photo.storageKey) };
 }
 
 export async function listDocuments(carId: string, auth: AuthContext) {
-  assertPermission(auth, "cars:read");
+  assertPermissionOrOwner(auth, "cars:read");
   await getScopedCar(carId, auth);
   return prisma.carDocument.findMany({ where: { carId }, orderBy: { createdAt: "desc" } });
 }
@@ -347,7 +328,7 @@ async function getScopedDocument(id: string, auth: AuthContext) {
 }
 
 export async function addDocument(carId: string, input: CreateCarDocumentInput, file: Express.Multer.File | undefined, auth: AuthContext) {
-  assertPermission(auth, "cars:update");
+  assertPermissionOrOwner(auth, "cars:update");
   const car = await getScopedCar(carId, auth);
   if (!file) throw new AppError("Document file is required", 400, "CAR_DOCUMENT_FILE_REQUIRED");
   const saved = await FileStorageService.saveFile(file, { agencyId: car.agencyId, carId });
@@ -364,13 +345,13 @@ export async function addDocument(carId: string, input: CreateCarDocumentInput, 
 }
 
 export async function getDocumentDownload(id: string, auth: AuthContext) {
-  assertPermission(auth, "cars:read");
+  assertPermissionOrOwner(auth, "cars:read");
   const document = await getScopedDocument(id, auth);
   return { document, stream: await FileStorageService.getFileStream(document.storageKey) };
 }
 
 export async function deleteDocument(id: string, auth: AuthContext) {
-  assertPermission(auth, "cars:update");
+  assertPermissionOrOwner(auth, "cars:update");
   const document = await getScopedDocument(id, auth);
   const deleted = await prisma.carDocument.delete({ where: { id } });
   try {

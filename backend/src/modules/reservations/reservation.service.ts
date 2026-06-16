@@ -1,8 +1,9 @@
-import { AuditAction, CarStatus, InvoiceStatus, InvoiceType, PaymentStatus, Prisma, ReservationStatus, UserRole, VehicleAnomalySeverity, VehicleAnomalyType } from "@prisma/client";
+import { AuditAction, CarStatus, InvoiceStatus, InvoiceType, PaymentStatus, Prisma, ReservationStatus, VehicleAnomalySeverity, VehicleAnomalyType } from "@prisma/client";
 import { prisma } from "../../prisma/prisma.service.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import type { AuthContext } from "../../shared/types/auth.js";
-import type { Permission } from "../../shared/utils/permissions.js";
+import { assertPermissionOrOwner, assertSameAgency, requireAgencyForCreate, requireAgencyScope } from "../../shared/utils/authz.js";
+import { paginationArgs } from "../../shared/utils/pagination.js";
 import { createAuditLog } from "../audit/audit.service.js";
 import { PlanLimitService } from "../subscriptions/plan-limit.service.js";
 import { detectCarAnomalies, ensureVehicleAnomaly } from "../vehicle-anomalies/vehicle-anomaly.service.js";
@@ -33,45 +34,32 @@ const reservationInclude = {
   }
 };
 
-function assertPermission(auth: AuthContext, permission: Permission) {
-  if (auth.role === UserRole.SUPER_ADMIN || auth.role === UserRole.AGENCY_ADMIN) return;
-  if (!auth.permissions.includes(permission)) throw new AppError("Insufficient permissions", 403, "INSUFFICIENT_PERMISSIONS");
-}
-
-function agencyScope(auth: AuthContext, requestedAgencyId?: string | null) {
-  if (auth.role === UserRole.SUPER_ADMIN) return requestedAgencyId ?? null;
-  if (!auth.agencyId) throw new AppError("Agency context is required", 403, "AGENCY_REQUIRED");
-  return auth.agencyId;
-}
-
-function createAgencyId(auth: AuthContext, requestedAgencyId?: string | null) {
-  if (auth.role === UserRole.SUPER_ADMIN) {
-    if (!requestedAgencyId) throw new AppError("Agency is required", 400, "RESERVATION_AGENCY_REQUIRED");
-    return requestedAgencyId;
-  }
-  if (!auth.agencyId) throw new AppError("Agency context is required", 403, "AGENCY_REQUIRED");
-  return auth.agencyId;
-}
-
 function totalDays(startDate: Date, endDate: Date) {
   return Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / 86_400_000));
 }
 
-function paymentStatus(totalAmount: number, advanceAmount: number) {
-  if (advanceAmount <= 0) return PaymentStatus.UNPAID;
-  if (advanceAmount >= totalAmount) return PaymentStatus.PAID;
+function toDecimal(value: number | string | Prisma.Decimal) {
+  return new Prisma.Decimal(value);
+}
+
+function paymentStatus(totalAmount: Prisma.Decimal, advanceAmount: Prisma.Decimal) {
+  if (advanceAmount.lte(0)) return PaymentStatus.UNPAID;
+  if (advanceAmount.gte(totalAmount)) return PaymentStatus.PAID;
   return PaymentStatus.PARTIAL;
 }
 
-function financials(input: { startDate: Date; endDate: Date; dailyPrice: number; advanceAmount: number }) {
+function financials(input: { startDate: Date; endDate: Date; dailyPrice: number | string | Prisma.Decimal; advanceAmount: number | string | Prisma.Decimal }) {
   const days = totalDays(input.startDate, input.endDate);
-  const totalAmount = days * input.dailyPrice;
-  const remainingAmount = Math.max(0, totalAmount - input.advanceAmount);
-  return { totalDays: days, totalAmount, remainingAmount, paymentStatus: paymentStatus(totalAmount, input.advanceAmount) };
+  const dailyPrice = toDecimal(input.dailyPrice);
+  const advanceAmount = toDecimal(input.advanceAmount);
+  const totalAmount = dailyPrice.mul(days);
+  const rawRemainingAmount = totalAmount.minus(advanceAmount);
+  const remainingAmount = rawRemainingAmount.isNegative() ? new Prisma.Decimal(0) : rawRemainingAmount;
+  return { totalDays: days, totalAmount, remainingAmount, paymentStatus: paymentStatus(totalAmount, advanceAmount) };
 }
 
 async function getScopedReservation(id: string, auth: AuthContext) {
-  const agencyId = agencyScope(auth);
+  const agencyId = requireAgencyScope(auth);
   const reservation = await prisma.reservation.findFirst({
     where: { id, ...(agencyId ? { agencyId } : {}) },
     include: reservationInclude
@@ -99,8 +87,8 @@ function auditMeta(reservation: { id: string; carId: string; clientId: string; s
 }
 
 export async function listReservations(query: ReservationQueryInput, auth: AuthContext) {
-  assertPermission(auth, "reservations:read");
-  const agencyId = agencyScope(auth, query.agencyId);
+  assertPermissionOrOwner(auth, "reservations:read");
+  const agencyId = requireAgencyScope(auth, query.agencyId);
   const dayStart = query.date ? new Date(`${query.date}T00:00:00.000Z`) : null;
   const dayEnd = dayStart ? new Date(dayStart.getTime() + 86_400_000) : null;
   return prisma.reservation.findMany({
@@ -122,20 +110,21 @@ export async function listReservations(query: ReservationQueryInput, auth: AuthC
         : {})
     },
     include: reservationInclude,
-    orderBy: { startDate: "desc" }
+    orderBy: { startDate: "desc" },
+    ...paginationArgs(query)
   });
 }
 
 export async function createReservation(input: CreateReservationInput, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "reservations:create");
-  const agencyId = createAgencyId(auth, input.agencyId);
+  assertPermissionOrOwner(auth, "reservations:create");
+  const agencyId = requireAgencyForCreate(auth, input.agencyId, "RESERVATION_AGENCY_REQUIRED");
   await PlanLimitService.assertCanCreateReservation(agencyId);
 
   const reservation = await prisma.$transaction(async (tx) => {
     await assertClientInAgency(tx, input.clientId, agencyId);
     const car = await assertCarAvailable(tx, { agencyId, carId: input.carId, startDate: input.startDate, endDate: input.endDate });
-    const dailyPrice = input.dailyPrice ?? Number(car.dailyPrice);
-    const depositAmount = input.depositAmount ?? Number(car.defaultDeposit);
+    const dailyPrice = input.dailyPrice ?? car.dailyPrice;
+    const depositAmount = input.depositAmount ?? car.defaultDeposit;
     const totals = financials({ startDate: input.startDate, endDate: input.endDate, dailyPrice, advanceAmount: input.advanceAmount });
     return tx.reservation.create({
       data: {
@@ -164,12 +153,12 @@ export async function createReservation(input: CreateReservationInput, auth: Aut
 }
 
 export async function getReservation(id: string, auth: AuthContext) {
-  assertPermission(auth, "reservations:read");
+  assertPermissionOrOwner(auth, "reservations:read");
   return getScopedReservation(id, auth);
 }
 
 export async function updateReservation(id: string, input: UpdateReservationInput, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "reservations:update");
+  assertPermissionOrOwner(auth, "reservations:update");
   const current = await getScopedReservation(id, auth);
   if (current.status !== ReservationStatus.CONFIRMED) throw new AppError("Only confirmed reservations can be updated", 409, "RESERVATION_NOT_EDITABLE");
 
@@ -181,8 +170,8 @@ export async function updateReservation(id: string, input: UpdateReservationInpu
     const endDate = input.endDate ?? current.endDate;
     await assertClientInAgency(tx, clientId, agencyId);
     const car = await assertCarAvailable(tx, { agencyId, carId, startDate, endDate, excludeReservationId: id });
-    const dailyPrice = input.dailyPrice ?? Number(current.dailyPrice ?? car.dailyPrice);
-    const advanceAmount = input.advanceAmount ?? Number(current.advanceAmount);
+    const dailyPrice = input.dailyPrice ?? current.dailyPrice ?? car.dailyPrice;
+    const advanceAmount = input.advanceAmount ?? current.advanceAmount;
     const totals = financials({ startDate, endDate, dailyPrice, advanceAmount });
     return tx.reservation.update({
       where: { id },
@@ -209,7 +198,7 @@ export async function updateReservation(id: string, input: UpdateReservationInpu
 }
 
 export async function cancelReservation(id: string, _input: CancelReservationInput, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "reservations:update");
+  assertPermissionOrOwner(auth, "reservations:update");
   const current = await getScopedReservation(id, auth);
   const updated = await prisma.$transaction(async (tx) => {
     const reservation = await tx.reservation.update({ where: { id }, data: { status: ReservationStatus.CANCELLED, cancelledAt: new Date() }, include: reservationInclude });
@@ -221,7 +210,7 @@ export async function cancelReservation(id: string, _input: CancelReservationInp
 }
 
 export async function startReservation(id: string, input: StartReservationInput, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "reservations:update");
+  assertPermissionOrOwner(auth, "reservations:update");
   const current = await getScopedReservation(id, auth);
   if (current.status !== ReservationStatus.CONFIRMED) throw new AppError("Reservation cannot be started", 409, "RESERVATION_CANNOT_START");
   const updated = await prisma.$transaction(async (tx) => {
@@ -234,11 +223,12 @@ export async function startReservation(id: string, input: StartReservationInput,
 }
 
 export async function completeReservation(id: string, input: CompleteReservationInput, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "reservations:update");
+  assertPermissionOrOwner(auth, "reservations:update");
   const current = await getScopedReservation(id, auth);
   if (current.status !== ReservationStatus.IN_PROGRESS) throw new AppError("Reservation cannot be completed", 409, "RESERVATION_CANNOT_COMPLETE");
   const car = await prisma.car.findUnique({ where: { id: current.carId }, select: { id: true, agencyId: true, currentMileage: true, registrationNumber: true } });
   if (!car) throw new AppError("Car not found", 404, "CAR_NOT_FOUND");
+  assertSameAgency(car.agencyId, auth, "CAR_NOT_FOUND");
   if (input.returnMileage !== undefined && input.returnMileage !== null && input.returnMileage < car.currentMileage) {
     await ensureVehicleAnomaly({
       agencyId: current.agencyId,
@@ -263,15 +253,15 @@ export async function completeReservation(id: string, input: CompleteReservation
 }
 
 export async function deleteReservation(id: string, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "reservations:delete");
+  assertPermissionOrOwner(auth, "reservations:delete");
   const updated = await cancelReservation(id, {}, auth, meta);
   await createAuditLog({ action: AuditAction.DELETE, entity: "Reservation", entityId: id, userId: auth.userId, agencyId: updated.agencyId, metadata: { event: "reservation_deleted", ...auditMeta(updated) }, ...meta });
   return updated;
 }
 
 export async function checkAvailability(input: CheckAvailabilityInput, auth: AuthContext) {
-  assertPermission(auth, "reservations:read");
-  const agencyId = createAgencyId(auth, input.agencyId);
+  assertPermissionOrOwner(auth, "reservations:read");
+  const agencyId = requireAgencyForCreate(auth, input.agencyId, "RESERVATION_AGENCY_REQUIRED");
   return prisma.$transaction((tx) => checkCarAvailability(tx, { agencyId, carId: input.carId, startDate: input.startDate, endDate: input.endDate, excludeReservationId: input.excludeReservationId }));
 }
 

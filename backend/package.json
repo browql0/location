@@ -10,7 +10,8 @@
     "lint": "eslint \"src/**/*.ts\" \"prisma/**/*.ts\"",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "rbac:smoke": "tsx prisma/rbac-smoke.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1068.0",

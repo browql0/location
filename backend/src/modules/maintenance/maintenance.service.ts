@@ -1,8 +1,9 @@
-import { AuditAction, MaintenanceStatus, UserRole } from "@prisma/client";
+import { AuditAction, MaintenanceStatus } from "@prisma/client";
 import { prisma } from "../../prisma/prisma.service.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import type { AuthContext } from "../../shared/types/auth.js";
-import type { Permission } from "../../shared/utils/permissions.js";
+import { assertPermissionOrOwner, assertSameAgency, requireAgencyForCreate, requireAgencyScope } from "../../shared/utils/authz.js";
+import { paginationArgs } from "../../shared/utils/pagination.js";
 import { createAuditLog } from "../audit/audit.service.js";
 import { FileStorageService } from "../files/file-storage.service.js";
 import { detectCarAnomalies } from "../vehicle-anomalies/vehicle-anomaly.service.js";
@@ -16,26 +17,6 @@ const maintenanceInclude = {
   documents: { orderBy: { createdAt: "desc" as const } }
 };
 
-function assertPermission(auth: AuthContext, permission: Permission) {
-  if (auth.role === UserRole.SUPER_ADMIN || auth.role === UserRole.AGENCY_ADMIN) return;
-  if (!auth.permissions.includes(permission)) throw new AppError("Insufficient permissions", 403, "INSUFFICIENT_PERMISSIONS");
-}
-
-function agencyScope(auth: AuthContext, requestedAgencyId?: string | null) {
-  if (auth.role === UserRole.SUPER_ADMIN) return requestedAgencyId ?? null;
-  if (!auth.agencyId) throw new AppError("Agency context is required", 403, "AGENCY_REQUIRED");
-  return auth.agencyId;
-}
-
-function createAgencyId(auth: AuthContext, requestedAgencyId?: string | null) {
-  if (auth.role === UserRole.SUPER_ADMIN) {
-    if (!requestedAgencyId) throw new AppError("Agency is required", 400, "MAINTENANCE_AGENCY_REQUIRED");
-    return requestedAgencyId;
-  }
-  if (!auth.agencyId) throw new AppError("Agency context is required", 403, "AGENCY_REQUIRED");
-  return auth.agencyId;
-}
-
 async function assertCarInAgency(carId: string, agencyId: string) {
   const car = await prisma.car.findFirst({ where: { id: carId, agencyId, deletedAt: null } });
   if (!car) throw new AppError("Car not found", 404, "CAR_NOT_FOUND");
@@ -43,7 +24,7 @@ async function assertCarInAgency(carId: string, agencyId: string) {
 }
 
 async function getScopedMaintenance(id: string, auth: AuthContext) {
-  const agencyId = agencyScope(auth);
+  const agencyId = requireAgencyScope(auth);
   const record = await prisma.maintenanceRecord.findFirst({
     where: { id, deletedAt: null, ...(agencyId ? { agencyId } : {}) },
     include: maintenanceInclude
@@ -57,8 +38,8 @@ function auditMeta(record: { id: string; agencyId: string; carId: string; type: 
 }
 
 export async function listMaintenance(query: MaintenanceQueryInput, auth: AuthContext) {
-  assertPermission(auth, "maintenance:read");
-  const agencyId = agencyScope(auth, query.agencyId);
+  assertPermissionOrOwner(auth, "maintenance:read");
+  const agencyId = requireAgencyScope(auth, query.agencyId);
   return prisma.maintenanceRecord.findMany({
     where: {
       deletedAt: null,
@@ -78,13 +59,14 @@ export async function listMaintenance(query: MaintenanceQueryInput, auth: AuthCo
         : {})
     },
     include: maintenanceInclude,
-    orderBy: { scheduledDate: "desc" }
+    orderBy: { scheduledDate: "desc" },
+    ...paginationArgs(query)
   });
 }
 
 export async function createMaintenance(input: CreateMaintenanceInput, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "maintenance:create");
-  const agencyId = createAgencyId(auth, input.agencyId);
+  assertPermissionOrOwner(auth, "maintenance:create");
+  const agencyId = requireAgencyForCreate(auth, input.agencyId, "MAINTENANCE_AGENCY_REQUIRED");
   await assertCarInAgency(input.carId, agencyId);
   const record = await prisma.maintenanceRecord.create({
     data: {
@@ -109,12 +91,12 @@ export async function createMaintenance(input: CreateMaintenanceInput, auth: Aut
 }
 
 export async function getMaintenance(id: string, auth: AuthContext) {
-  assertPermission(auth, "maintenance:read");
+  assertPermissionOrOwner(auth, "maintenance:read");
   return getScopedMaintenance(id, auth);
 }
 
 export async function updateMaintenance(id: string, input: UpdateMaintenanceInput, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "maintenance:update");
+  assertPermissionOrOwner(auth, "maintenance:update");
   const current = await getScopedMaintenance(id, auth);
   if (input.carId) await assertCarInAgency(input.carId, current.agencyId);
   const updated = await prisma.maintenanceRecord.update({
@@ -139,7 +121,7 @@ export async function updateMaintenance(id: string, input: UpdateMaintenanceInpu
 }
 
 export async function startMaintenance(id: string, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "maintenance:update");
+  assertPermissionOrOwner(auth, "maintenance:update");
   await getScopedMaintenance(id, auth);
   const updated = await prisma.maintenanceRecord.update({ where: { id }, data: { status: MaintenanceStatus.IN_PROGRESS }, include: maintenanceInclude });
   await createAuditLog({ action: AuditAction.UPDATE, entity: "MaintenanceRecord", entityId: id, userId: auth.userId, agencyId: updated.agencyId, metadata: { event: "maintenance_started", ...auditMeta(updated) }, ...meta });
@@ -147,7 +129,7 @@ export async function startMaintenance(id: string, auth: AuthContext, meta: Requ
 }
 
 export async function completeMaintenance(id: string, input: CompleteMaintenanceInput, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "maintenance:update");
+  assertPermissionOrOwner(auth, "maintenance:update");
   const current = await getScopedMaintenance(id, auth);
   const completedDate = input.completedDate ?? new Date();
   const updated = await prisma.$transaction(async (tx) => {
@@ -174,7 +156,7 @@ export async function completeMaintenance(id: string, input: CompleteMaintenance
 }
 
 export async function cancelMaintenance(id: string, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "maintenance:update");
+  assertPermissionOrOwner(auth, "maintenance:update");
   await getScopedMaintenance(id, auth);
   const updated = await prisma.maintenanceRecord.update({ where: { id }, data: { status: MaintenanceStatus.CANCELLED }, include: maintenanceInclude });
   await createAuditLog({ action: AuditAction.UPDATE, entity: "MaintenanceRecord", entityId: id, userId: auth.userId, agencyId: updated.agencyId, metadata: { event: "maintenance_cancelled", ...auditMeta(updated) }, ...meta });
@@ -182,7 +164,7 @@ export async function cancelMaintenance(id: string, auth: AuthContext, meta: Req
 }
 
 export async function deleteMaintenance(id: string, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "maintenance:delete");
+  assertPermissionOrOwner(auth, "maintenance:delete");
   const current = await getScopedMaintenance(id, auth);
   const updated = await prisma.maintenanceRecord.update({ where: { id }, data: { deletedAt: new Date() }, include: maintenanceInclude });
   await createAuditLog({ action: AuditAction.DELETE, entity: "MaintenanceRecord", entityId: id, userId: auth.userId, agencyId: current.agencyId, metadata: { event: "maintenance_deleted", ...auditMeta(updated) }, ...meta });
@@ -204,13 +186,12 @@ export async function calendar(query: MaintenanceQueryInput, auth: AuthContext) 
 async function getScopedDocument(id: string, auth: AuthContext) {
   const document = await prisma.maintenanceDocument.findUnique({ where: { id }, include: { maintenance: true } });
   if (!document || document.maintenance.deletedAt) throw new AppError("Maintenance document not found", 404, "MAINTENANCE_DOCUMENT_NOT_FOUND");
-  const agencyId = agencyScope(auth);
-  if (agencyId && document.maintenance.agencyId !== agencyId) throw new AppError("Maintenance document not found", 404, "MAINTENANCE_DOCUMENT_NOT_FOUND");
+  assertSameAgency(document.maintenance.agencyId, auth, "MAINTENANCE_DOCUMENT_NOT_FOUND");
   return document;
 }
 
 export async function addDocument(id: string, file: Express.Multer.File | undefined, auth: AuthContext, meta: RequestMeta) {
-  assertPermission(auth, "maintenance:update");
+  assertPermissionOrOwner(auth, "maintenance:update");
   const record = await getScopedMaintenance(id, auth);
   if (!file) throw new AppError("Document file is required", 400, "MAINTENANCE_DOCUMENT_REQUIRED");
   const saved = await FileStorageService.saveFile(file, { agencyId: record.agencyId, maintenanceId: record.id });
@@ -222,13 +203,13 @@ export async function addDocument(id: string, file: Express.Multer.File | undefi
 }
 
 export async function downloadDocument(id: string, auth: AuthContext) {
-  assertPermission(auth, "maintenance:read");
+  assertPermissionOrOwner(auth, "maintenance:read");
   const document = await getScopedDocument(id, auth);
   return { document, stream: await FileStorageService.getFileStream(document.storageKey) };
 }
 
 export async function deleteDocument(id: string, auth: AuthContext) {
-  assertPermission(auth, "maintenance:update");
+  assertPermissionOrOwner(auth, "maintenance:update");
   const document = await getScopedDocument(id, auth);
   const deleted = await prisma.maintenanceDocument.delete({ where: { id } });
   try {

@@ -1,5 +1,6 @@
 import { CarStatus, DocumentType, FuelType, TransmissionType } from "@prisma/client";
 import { z } from "zod";
+import { paginationQueryFields } from "../../shared/utils/pagination.js";
 
 const optionalDate = z
   .union([z.string().datetime(), z.string().date(), z.literal(""), z.null()])
@@ -11,7 +12,8 @@ const money = z.coerce.number().min(0);
 export const carQuerySchema = z.object({
   agencyId: z.string().optional(),
   search: z.string().optional(),
-  status: z.nativeEnum(CarStatus).optional()
+  status: z.nativeEnum(CarStatus).optional(),
+  ...paginationQueryFields
 });
 
 export const createCarSchema = z.object({

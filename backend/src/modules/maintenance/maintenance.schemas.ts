@@ -1,5 +1,6 @@
 import { MaintenanceStatus, MaintenanceType } from "@prisma/client";
 import { z } from "zod";
+import { paginationQueryFields } from "../../shared/utils/pagination.js";
 
 const optionalDate = z.union([z.string().datetime(), z.string().date(), z.literal(""), z.null()]).optional().transform((value) => (value ? new Date(value) : null));
 const requiredDate = z.union([z.string().datetime(), z.string().date()]).transform((value) => new Date(value));
@@ -13,7 +14,8 @@ export const maintenanceQuerySchema = z.object({
   status: z.nativeEnum(MaintenanceStatus).optional(),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
-  search: z.string().trim().optional()
+  search: z.string().trim().optional(),
+  ...paginationQueryFields
 });
 
 export const createMaintenanceSchema = z.object({
