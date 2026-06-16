@@ -5,7 +5,7 @@ import { prisma } from "../../prisma/prisma.service.js";
 import { createAuditLog } from "../audit/audit.service.js";
 import { mergeUserPermissions } from "../../shared/utils/permissions.js";
 import type { ChangePasswordInput, LoginInput, RegisterAgencyInput } from "./auth.schemas.js";
-import { generateRefreshToken, hashRefreshToken, refreshTokenExpiryDate, signAccessToken } from "./token.service.js";
+import { generateRefreshToken, generateTokenFamily, hashRefreshToken, refreshTokenExpiryDate, signAccessToken } from "./token.service.js";
 
 type RequestMeta = {
   ipAddress?: string;
@@ -98,22 +98,30 @@ async function assertAccountCanAuthenticate(user: {
   }
 }
 
-async function issueTokenPair(user: { id: string; role: UserRole; agencyId: string | null }) {
+async function issueSessionToken(
+  user: { id: string; role: UserRole; agencyId: string | null },
+  meta: RequestMeta,
+  tokenFamily = generateTokenFamily()
+) {
   const accessToken = signAccessToken({
     sub: user.id,
     role: user.role,
     agencyId: user.agencyId
   });
   const refreshToken = generateRefreshToken();
-  const refreshTokenRecord = await prisma.refreshToken.create({
+  const session = await prisma.userSession.create({
     data: {
       userId: user.id,
-      tokenHash: hashRefreshToken(refreshToken),
-      expiresAt: refreshTokenExpiryDate()
+      refreshTokenHash: hashRefreshToken(refreshToken),
+      tokenFamily,
+      expiresAt: refreshTokenExpiryDate(),
+      lastUsedAt: new Date(),
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent
     }
   });
 
-  return { accessToken, refreshToken, refreshTokenId: refreshTokenRecord.id };
+  return { accessToken, refreshToken, sessionId: session.id, tokenFamily };
 }
 
 export async function login(input: LoginInput, meta: RequestMeta) {
@@ -132,7 +140,7 @@ export async function login(input: LoginInput, meta: RequestMeta) {
   }
 
   await assertAccountCanAuthenticate(user, meta);
-  const tokenPair = await issueTokenPair(user);
+  const tokenPair = await issueSessionToken(user, meta);
 
   await prisma.user.update({
     where: { id: user.id },
@@ -158,12 +166,8 @@ export async function login(input: LoginInput, meta: RequestMeta) {
 
 export async function refresh(refreshToken: string, meta: RequestMeta) {
   const tokenHash = hashRefreshToken(refreshToken);
-  const storedToken = await prisma.refreshToken.findFirst({
-    where: {
-      tokenHash,
-      revokedAt: null,
-      expiresAt: { gt: new Date() }
-    },
+  const storedSession = await prisma.userSession.findUnique({
+    where: { refreshTokenHash: tokenHash },
     include: {
       user: {
         include: { agency: { select: { id: true, name: true, status: true } } }
@@ -171,58 +175,80 @@ export async function refresh(refreshToken: string, meta: RequestMeta) {
     }
   });
 
-  if (!storedToken) {
+  if (!storedSession) {
     throw new AppError("Invalid refresh token", 401, "INVALID_REFRESH_TOKEN");
   }
 
-  await assertAccountCanAuthenticate(storedToken.user, meta);
-  const tokenPair = await issueTokenPair(storedToken.user);
+  const now = new Date();
+  if (storedSession.revokedAt) {
+    await prisma.userSession.updateMany({
+      where: { tokenFamily: storedSession.tokenFamily, revokedAt: null },
+      data: { revokedAt: now }
+    });
+    await createAuditLog({
+      action: AuditAction.DISABLE,
+      entity: "UserSession",
+      entityId: storedSession.id,
+      userId: storedSession.userId,
+      agencyId: storedSession.user.agencyId,
+      metadata: { event: "auth.refresh.reuse_detected", tokenFamily: storedSession.tokenFamily },
+      ...meta
+    });
+    throw new AppError("Refresh token has been revoked", 401, "REFRESH_TOKEN_REUSED");
+  }
 
-  await prisma.refreshToken.update({
-    where: { id: storedToken.id },
-    data: { revokedAt: new Date() }
+  if (storedSession.expiresAt <= now) {
+    await prisma.userSession.update({ where: { id: storedSession.id }, data: { revokedAt: now, lastUsedAt: now } });
+    throw new AppError("Refresh token has expired", 401, "REFRESH_TOKEN_EXPIRED");
+  }
+
+  await assertAccountCanAuthenticate(storedSession.user, meta);
+  const tokenPair = await issueSessionToken(storedSession.user, meta, storedSession.tokenFamily);
+
+  await prisma.userSession.update({
+    where: { id: storedSession.id },
+    data: { revokedAt: now, lastUsedAt: now }
   });
 
   await createAuditLog({
     action: AuditAction.UPDATE,
-    entity: "RefreshToken",
-    entityId: storedToken.id,
-    userId: storedToken.userId,
-    agencyId: storedToken.user.agencyId,
-    metadata: { event: "auth.refresh.rotated", newRefreshTokenId: tokenPair.refreshTokenId },
+    entity: "UserSession",
+    entityId: storedSession.id,
+    userId: storedSession.userId,
+    agencyId: storedSession.user.agencyId,
+    metadata: { event: "auth.refresh.rotated", newSessionId: tokenPair.sessionId, tokenFamily: storedSession.tokenFamily },
     ...meta
   });
 
   return {
     ...tokenPair,
-    user: publicUser(storedToken.user),
-    subscriptionStatus: await getCurrentSubscriptionStatus(storedToken.user.agencyId)
+    user: publicUser(storedSession.user),
+    subscriptionStatus: await getCurrentSubscriptionStatus(storedSession.user.agencyId)
   };
 }
 
 export async function logout(refreshToken: string | undefined, userId: string | undefined, meta: RequestMeta) {
   if (refreshToken) {
-    const token = await prisma.refreshToken.findFirst({
-      where: {
-        tokenHash: hashRefreshToken(refreshToken),
-        revokedAt: null
-      },
+    const session = await prisma.userSession.findUnique({
+      where: { refreshTokenHash: hashRefreshToken(refreshToken) },
       include: { user: true }
     });
 
-    if (token) {
-      await prisma.refreshToken.update({
-        where: { id: token.id },
-        data: { revokedAt: new Date() }
-      });
+    if (session) {
+      if (!session.revokedAt) {
+        await prisma.userSession.update({
+          where: { id: session.id },
+          data: { revokedAt: new Date(), lastUsedAt: new Date() }
+        });
+      }
 
       await createAuditLog({
         action: AuditAction.LOGOUT,
-        entity: "RefreshToken",
-        entityId: token.id,
-        userId: token.userId,
-        agencyId: token.user.agencyId,
-        metadata: { event: "auth.logout.token_revoked" },
+        entity: "UserSession",
+        entityId: session.id,
+        userId: session.userId,
+        agencyId: session.user.agencyId,
+        metadata: { event: "auth.logout.session_revoked", tokenFamily: session.tokenFamily },
         ...meta
       });
       return;
@@ -354,7 +380,7 @@ export async function registerAgency(input: RegisterAgencyInput, meta: RequestMe
     return { agency, user, subscription };
   });
 
-  const tokenPair = await issueTokenPair(result.user);
+  const tokenPair = await issueSessionToken(result.user, meta);
 
   return {
     ...tokenPair,

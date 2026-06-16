@@ -5,6 +5,7 @@ import { asyncHandler } from "../../middlewares/async-handler.js";
 import * as authService from "./auth.service.js";
 
 const refreshCookieName = "refreshToken";
+const refreshCookiePath = `${env.API_PREFIX}/auth`;
 
 function requestMeta(req: Request) {
   return {
@@ -18,7 +19,7 @@ function setRefreshCookie(res: Response, refreshToken: string) {
     httpOnly: true,
     sameSite: "lax",
     secure: env.NODE_ENV === "production",
-    path: "/api/v1/auth",
+    path: refreshCookiePath,
     maxAge: 30 * 24 * 60 * 60 * 1000
   });
 }
@@ -28,7 +29,7 @@ function clearRefreshCookie(res: Response) {
     httpOnly: true,
     sameSite: "lax",
     secure: env.NODE_ENV === "production",
-    path: "/api/v1/auth"
+    path: refreshCookiePath
   });
 }
 
@@ -53,7 +54,7 @@ export const registerAgency: RequestHandler = asyncHandler(async (req: Request, 
 });
 
 export const refresh: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
-  const refreshToken = req.cookies?.[refreshCookieName] ?? req.body?.refreshToken;
+  const refreshToken = req.cookies?.[refreshCookieName];
   if (!refreshToken) {
     throw new AppError("Refresh token is required", 401, "REFRESH_TOKEN_REQUIRED");
   }
@@ -68,7 +69,7 @@ export const refresh: RequestHandler = asyncHandler(async (req: Request, res: Re
 });
 
 export const logout: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
-  const refreshToken = req.cookies?.[refreshCookieName] ?? req.body?.refreshToken;
+  const refreshToken = req.cookies?.[refreshCookieName];
   await authService.logout(refreshToken, req.auth?.userId, requestMeta(req));
   clearRefreshCookie(res);
   res.status(204).send();

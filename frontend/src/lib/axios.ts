@@ -9,17 +9,12 @@ export const api = axios.create({
   withCredentials: true
 });
 
-let accessToken: string | null = localStorage.getItem("accessToken");
+let accessToken: string | null = null;
 let onAuthFailure: (() => void) | null = null;
 let onTokenRefresh: ((token: string) => void) | null = null;
 
 export function setAccessToken(token: string | null) {
   accessToken = token;
-  if (token) {
-    localStorage.setItem("accessToken", token);
-  } else {
-    localStorage.removeItem("accessToken");
-  }
 }
 
 export function setAuthFailureHandler(handler: (() => void) | null) {

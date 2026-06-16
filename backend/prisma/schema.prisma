@@ -375,6 +375,7 @@ model User {
   permissions  String[]   @default([])
 
   refreshTokens       RefreshToken[]
+  sessions            UserSession[]
   auditLogs           AuditLog[]
   createdReservations Reservation[] @relation("ReservationCreatedBy")
   validatedIncidents  Incident[]    @relation("IncidentValidatedBy")
@@ -400,6 +401,25 @@ model RefreshToken {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+model UserSession {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id])
+  refreshTokenHash String    @unique
+  tokenFamily      String
+  revokedAt        DateTime?
+  expiresAt        DateTime
+  createdAt        DateTime  @default(now())
+  lastUsedAt       DateTime?
+  userAgent        String?
+  ipAddress        String?
+
+  @@index([userId])
+  @@index([tokenFamily])
+  @@index([expiresAt])
+  @@index([revokedAt])
 }
 
 model Car {

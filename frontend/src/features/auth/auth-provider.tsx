@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { api, hasAccessToken, setAccessToken, setAuthFailureHandler, setTokenRefreshHandler } from "@/lib/axios";
+import { api, setAccessToken, setAuthFailureHandler, setTokenRefreshHandler } from "@/lib/axios";
 import { getApiErrorMessage } from "@/lib/api-error";
 import type { AuthResponse, AuthUser } from "@/types/auth";
 import type { LoginFormValues, RegisterAgencyFormValues } from "./auth.schemas";
@@ -33,7 +33,7 @@ function redirectPathFromState(state: unknown) {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [accessToken, setToken] = useState<string | null>(() => localStorage.getItem("accessToken"));
+  const [accessToken, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
@@ -71,12 +71,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [clearAuth, location.pathname, navigate]);
 
   useEffect(() => {
-    if (!hasAccessToken()) {
-      clearAuth();
-      setIsLoading(false);
-      return;
-    }
-
     refreshSession()
       .catch(() => clearAuth())
       .finally(() => setIsLoading(false));
