@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Ban, CheckCircle2, Download, Edit, FileText, Play } from "lucide-react";
+import { Ban, CheckCircle2, CreditCard, Download, Edit, FileText, Play, Upload, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { AppPageHeader } from "@/components/ui-custom/app-page-header";
@@ -12,6 +12,18 @@ import { StatusBadge } from "@/components/ui-custom/status-badge";
 import { useAuth } from "@/features/auth/auth-provider";
 import { downloadContractPdf, generateContract } from "@/features/contracts/contracts-api";
 import { downloadInvoicePdf, generateRentalInvoice, sendInvoiceToClient } from "@/features/invoices/invoices-api";
+import {
+  cancelPayment,
+  capturePaypalPayment,
+  confirmManualPayment,
+  createPaypalOrder,
+  createReservationPayment,
+  downloadPaymentProof,
+  listPayments,
+  type Payment,
+  type PaymentMethod,
+  uploadPaymentProof
+} from "@/features/payments/payments-api";
 import { cancelReservation, completeReservation, getReservation, startReservation, type Reservation } from "@/features/reservations/reservations-api";
 import { getApiErrorMessage } from "@/lib/api-error";
 import type { AuthUser, Permission } from "@/types/auth";
@@ -23,24 +35,34 @@ function hasPermission(user: AuthUser | null, permission: Permission) {
 
 const money = (value: string | null) => `${Number(value ?? 0).toLocaleString("fr-FR")} MAD`;
 const date = (value: string) => new Date(value).toLocaleDateString("fr-FR");
+const paymentMethods: PaymentMethod[] = ["CASH", "BANK_TRANSFER", "PAYPAL", "CARD_MANUAL", "CHECK", "OTHER"];
 
 export function ReservationDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [reservation, setReservation] = useState<Reservation | null>(null);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [paymentForm, setPaymentForm] = useState<{ amount: string; method: PaymentMethod; paidAt: string; reference: string; notes: string }>({ amount: "", method: "CASH", paidAt: "", reference: "", notes: "" });
   const [isLoading, setIsLoading] = useState(true);
   const canUpdate = hasPermission(user, "reservations:update");
   const canCreateContract = hasPermission(user, "contracts:create");
   const canReadContract = hasPermission(user, "contracts:read");
   const canCreateInvoice = hasPermission(user, "invoices:create");
   const canReadInvoice = hasPermission(user, "invoices:read");
+  const canReadPayments = hasPermission(user, "payments:read");
+  const canCreatePayments = hasPermission(user, "payments:create");
+  const canUpdatePayments = hasPermission(user, "payments:update");
+  const canDeletePayments = hasPermission(user, "payments:delete");
 
   async function load() {
     if (!id) return;
     try {
       setIsLoading(true);
-      setReservation(await getReservation(id));
+      const loadedReservation = await getReservation(id);
+      setReservation(loadedReservation);
+      setPaymentForm((current) => ({ ...current, amount: String(Number(loadedReservation.remainingAmount || 0)) }));
+      setPayments(canReadPayments ? await listPayments({ reservationId: id }) : []);
     } catch (error) {
       toast.error("Chargement impossible", { description: getApiErrorMessage(error) });
     } finally {
@@ -110,6 +132,57 @@ export function ReservationDetailPage() {
     }
   }
 
+  async function runCreatePayment() {
+    if (!reservation) return;
+    try {
+      await createReservationPayment(reservation.id, {
+        amount: Number(paymentForm.amount),
+        method: paymentForm.method,
+        paidAt: paymentForm.paidAt || null,
+        reference: paymentForm.reference || null,
+        notes: paymentForm.notes || null
+      });
+      toast.success("Paiement ajoute");
+      await load();
+    } catch (error) {
+      toast.error("Paiement impossible", { description: getApiErrorMessage(error) });
+    }
+  }
+
+  async function runPaymentAction(action: "confirm" | "cancel" | "paypal-order" | "paypal-capture", payment: Payment) {
+    try {
+      if (action === "confirm") await confirmManualPayment(payment.id);
+      if (action === "cancel") await cancelPayment(payment.id);
+      if (action === "paypal-order") {
+        const order = await createPaypalOrder(payment.id);
+        if (order.approvalUrl) window.open(order.approvalUrl, "_blank", "noopener,noreferrer");
+      }
+      if (action === "paypal-capture") await capturePaypalPayment(payment.id);
+      toast.success("Paiement mis a jour");
+      await load();
+    } catch (error) {
+      toast.error("Action paiement impossible", { description: getApiErrorMessage(error) });
+    }
+  }
+
+  async function runProofUpload(payment: Payment) {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/pdf,image/png,image/jpeg";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        await uploadPaymentProof(payment.id, file);
+        toast.success("Justificatif ajoute");
+        await load();
+      } catch (error) {
+        toast.error("Upload impossible", { description: getApiErrorMessage(error) });
+      }
+    };
+    input.click();
+  }
+
   return (
     <PageContainer>
       <AppPageHeader
@@ -138,6 +211,60 @@ export function ReservationDetailPage() {
           </dl>
         </AppSection>
       </div>
+
+      {canReadPayments ? (
+        <AppSection className="rounded-lg border bg-card p-5" title="Paiements">
+          <div className="grid gap-3 md:grid-cols-4">
+            <div className="rounded-md border bg-background p-3 text-sm"><div className="text-muted-foreground">Total reservation</div><strong>{money(reservation.totalAmount)}</strong></div>
+            <div className="rounded-md border bg-background p-3 text-sm"><div className="text-muted-foreground">Total paye</div><strong>{money(String(Number(reservation.totalAmount) - Number(reservation.remainingAmount)))}</strong></div>
+            <div className="rounded-md border bg-background p-3 text-sm"><div className="text-muted-foreground">Reste</div><strong>{money(reservation.remainingAmount)}</strong></div>
+            <div className="rounded-md border bg-background p-3 text-sm"><div className="text-muted-foreground">Statut</div><StatusBadge status={reservation.paymentStatus} /></div>
+          </div>
+
+          {canCreatePayments ? (
+            <div className="mt-4 grid gap-3 rounded-md border bg-background p-3 lg:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+              <input className="h-9 rounded-md border bg-background px-3 text-sm" min="0" step="0.01" type="number" value={paymentForm.amount} onChange={(event) => setPaymentForm((current) => ({ ...current, amount: event.target.value }))} />
+              <select className="h-9 rounded-md border bg-background px-3 text-sm" value={paymentForm.method} onChange={(event) => setPaymentForm((current) => ({ ...current, method: event.target.value as PaymentMethod }))}>
+                {paymentMethods.map((method) => <option key={method} value={method}>{method}</option>)}
+              </select>
+              <input className="h-9 rounded-md border bg-background px-3 text-sm" type="date" value={paymentForm.paidAt} onChange={(event) => setPaymentForm((current) => ({ ...current, paidAt: event.target.value }))} />
+              <input className="h-9 rounded-md border bg-background px-3 text-sm" placeholder="Reference" value={paymentForm.reference} onChange={(event) => setPaymentForm((current) => ({ ...current, reference: event.target.value }))} />
+              <Button type="button" onClick={runCreatePayment}><Wallet className="mr-2 h-4 w-4" /> Ajouter</Button>
+              {Number(paymentForm.amount) > Number(reservation.remainingAmount) ? <p className="text-xs text-amber-600 lg:col-span-5">Montant superieur au reste a payer.</p> : null}
+            </div>
+          ) : null}
+
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead className="text-left text-xs uppercase text-muted-foreground">
+                <tr><th className="py-2">Date</th><th>Methode</th><th>Montant</th><th>Statut</th><th>Reference</th><th className="text-right">Actions</th></tr>
+              </thead>
+              <tbody>
+                {payments.map((payment) => (
+                  <tr className="border-t" key={payment.id}>
+                    <td className="py-3">{payment.paidAt ? date(payment.paidAt) : date(payment.createdAt)}</td>
+                    <td>{payment.method}</td>
+                    <td className="font-medium">{money(payment.amount)}</td>
+                    <td><StatusBadge status={payment.status} /></td>
+                    <td>{payment.reference ?? "-"}</td>
+                    <td>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {payment.status === "PENDING" && payment.method !== "PAYPAL" && canUpdatePayments ? <Button className="h-8 px-3 text-xs" variant="outline" onClick={() => runPaymentAction("confirm", payment)}>Confirmer</Button> : null}
+                        {payment.status === "PENDING" && payment.method === "PAYPAL" && canUpdatePayments ? <Button className="h-8 px-3 text-xs" variant="outline" onClick={() => runPaymentAction("paypal-order", payment)}><CreditCard className="mr-1 h-3.5 w-3.5" /> PayPal</Button> : null}
+                        {payment.status === "PENDING" && payment.method === "PAYPAL" && payment.paypalOrderId && canUpdatePayments ? <Button className="h-8 px-3 text-xs" variant="outline" onClick={() => runPaymentAction("paypal-capture", payment)}>Capturer</Button> : null}
+                        {payment.method === "BANK_TRANSFER" && canUpdatePayments ? <Button className="h-8 px-3 text-xs" variant="outline" onClick={() => runProofUpload(payment)}><Upload className="mr-1 h-3.5 w-3.5" /> Preuve</Button> : null}
+                        {payment.proofStorageKey ? <Button className="h-8 px-3 text-xs" variant="outline" onClick={() => downloadPaymentProof(payment.id, payment.proofFileName ?? "proof")}>Preuve</Button> : null}
+                        {payment.status !== "CANCELLED" && canDeletePayments ? <Button className="h-8 px-3 text-xs" variant="outline" onClick={() => runPaymentAction("cancel", payment)}>Annuler</Button> : null}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {payments.length === 0 ? <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">Aucun paiement enregistre.</div> : null}
+          </div>
+        </AppSection>
+      ) : null}
 
       {reservation.notes ? <AppSection className="rounded-lg border bg-card p-5" title="Notes"><p className="text-sm text-muted-foreground">{reservation.notes}</p></AppSection> : null}
 

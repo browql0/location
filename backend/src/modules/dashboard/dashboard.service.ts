@@ -1,4 +1,4 @@
-import { AgencyStatus, AuditAction, BillingInterval, CarStatus, IncidentStatus, InvoiceStatus, InvoiceType, MaintenanceStatus, PaymentStatus, ReservationStatus, SubscriptionStatus, UserRole, VehicleAnomalySeverity, VehicleAnomalyType } from "@prisma/client";
+import { AgencyStatus, AuditAction, BillingInterval, CarStatus, IncidentStatus, InvoiceStatus, InvoiceType, MaintenanceStatus, PaymentMethod, PaymentRecordStatus, PaymentStatus, ReservationStatus, SubscriptionStatus, UserRole, VehicleAnomalySeverity, VehicleAnomalyType } from "@prisma/client";
 import { prisma } from "../../prisma/prisma.service.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import type { AuthContext } from "../../shared/types/auth.js";
@@ -569,7 +569,13 @@ export async function getAgencyDashboard(auth: AuthContext) {
     plannedMaintenanceCount,
     criticalAnomalies,
     expiredInsurances,
-    expiredTechnicalInspections
+    expiredTechnicalInspections,
+    confirmedPaymentSums,
+    outstandingReservationSums,
+    pendingPayments,
+    confirmedPayments,
+    paypalPayments,
+    pendingBankTransfers
   ] = await Promise.all([
     prisma.car.count({ where: { agencyId, deletedAt: null, status: { not: CarStatus.INACTIVE } } }),
     prisma.car.count({ where: { agencyId, deletedAt: null, status: CarStatus.AVAILABLE } }),
@@ -613,7 +619,13 @@ export async function getAgencyDashboard(auth: AuthContext) {
     prisma.maintenanceRecord.count({ where: { agencyId, deletedAt: null, status: MaintenanceStatus.PLANNED } }),
     prisma.vehicleAnomaly.count({ where: { agencyId, resolved: false, severity: VehicleAnomalySeverity.CRITICAL } }),
     prisma.vehicleAnomaly.count({ where: { agencyId, resolved: false, type: VehicleAnomalyType.INSURANCE_EXPIRED } }),
-    prisma.vehicleAnomaly.count({ where: { agencyId, resolved: false, type: VehicleAnomalyType.TECHNICAL_INSPECTION_EXPIRED } })
+    prisma.vehicleAnomaly.count({ where: { agencyId, resolved: false, type: VehicleAnomalyType.TECHNICAL_INSPECTION_EXPIRED } }),
+    prisma.payment.aggregate({ where: { agencyId, status: PaymentRecordStatus.CONFIRMED }, _sum: { amount: true } }),
+    prisma.reservation.aggregate({ where: { agencyId, status: { not: ReservationStatus.CANCELLED } }, _sum: { remainingAmount: true } }),
+    prisma.payment.count({ where: { agencyId, status: PaymentRecordStatus.PENDING } }),
+    prisma.payment.count({ where: { agencyId, status: PaymentRecordStatus.CONFIRMED } }),
+    prisma.payment.count({ where: { agencyId, method: PaymentMethod.PAYPAL } }),
+    prisma.payment.count({ where: { agencyId, method: PaymentMethod.BANK_TRANSFER, status: PaymentRecordStatus.PENDING } })
   ]);
 
   const cars = await prisma.car.findMany({
@@ -663,6 +675,12 @@ export async function getAgencyDashboard(auth: AuthContext) {
       rentalAmountInvoiced: Number(rentalInvoiceSums._sum.totalAmount ?? 0),
       rentalAmountPaid: Number(rentalInvoiceSums._sum.paidAmount ?? 0),
       rentalAmountRemaining: Number(rentalInvoiceSums._sum.remainingAmount ?? 0),
+      totalCollected: Number(confirmedPaymentSums._sum.amount ?? 0),
+      totalOutstanding: Number(outstandingReservationSums._sum.remainingAmount ?? 0),
+      pendingPayments,
+      confirmedPayments,
+      paypalPayments,
+      pendingBankTransfers,
       vehiclesNeedingMaintenance,
       overdueOilChanges,
       plannedMaintenance: plannedMaintenanceCount,

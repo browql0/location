@@ -14,6 +14,7 @@ export type SaveFileOptions = {
   clientId?: string;
   carId?: string;
   maintenanceId?: string;
+  paymentId?: string;
   expenseId?: string;
   agencyLogo?: boolean;
   file: Express.Multer.File;
@@ -36,7 +37,7 @@ export interface FileStorageProvider {
 
 const allowedDocumentExtensions = new Set([".pdf", ".png", ".jpg", ".jpeg"]);
 const allowedPhotoExtensions = new Set([".png", ".jpg", ".jpeg", ".webp"]);
-const allowedStoragePrefixes = ["clients/", "cars/", "agency-logos/", "maintenance/", "expenses/", "contracts/", "invoices/"];
+const allowedStoragePrefixes = ["clients/", "cars/", "agency-logos/", "maintenance/", "expenses/", "contracts/", "invoices/", "payments/"];
 
 const maxBytesByMimeType = new Map([
   ["application/pdf", 10 * 1024 * 1024],
@@ -59,6 +60,7 @@ function safeFileName(originalName: string) {
 function storageKeyFor(options: Omit<SaveFileOptions, "file">, originalName: string) {
   if (options.agencyLogo) return `agency-logos/${options.agencyId}/${safeFileName(originalName)}`;
   if (options.expenseId) return `expenses/${options.agencyId}/${options.expenseId}/${safeFileName(originalName)}`;
+  if (options.paymentId) return `payments/${options.agencyId}/${options.paymentId}/proof-${safeFileName(originalName)}`;
   if (options.maintenanceId) return `maintenance/${options.agencyId}/${options.maintenanceId}/${safeFileName(originalName)}`;
   if (options.carId) return `cars/${options.agencyId}/${options.carId}/${safeFileName(originalName)}`;
   if (options.clientId) return `clients/${options.agencyId}/${options.clientId}/${safeFileName(originalName)}`;
@@ -196,5 +198,9 @@ export function isAllowedAgencyLogoFile(file: Pick<Express.Multer.File, "mimetyp
 }
 
 export function isAllowedMaintenanceDocumentFile(file: Pick<Express.Multer.File, "mimetype" | "originalname">) {
+  return isAllowedClientDocumentFile(file);
+}
+
+export function isAllowedPaymentProofFile(file: Pick<Express.Multer.File, "mimetype" | "originalname">) {
   return isAllowedClientDocumentFile(file);
 }

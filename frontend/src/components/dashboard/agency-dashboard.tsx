@@ -50,6 +50,12 @@ export function AgencyDashboard() {
         <StatCard title="Reservations du mois" value={String(kpis?.reservationsMonth ?? "-")} icon={CalendarClock} />
         <StatCard title="Revenus du mois" value={kpis ? money(kpis.revenueMonth) : "-"} icon={Wallet} />
         <StatCard title="Revenus annuels" value={kpis ? money(kpis.revenueYear) : "-"} icon={Wallet} />
+        <StatCard title="Total encaisse" value={kpis ? money(kpis.totalCollected) : "-"} icon={Wallet} />
+        <StatCard title="Reste a encaisser" value={kpis ? money(kpis.totalOutstanding) : "-"} icon={Wallet} />
+        <StatCard title="Paiements pending" value={String(kpis?.pendingPayments ?? "-")} icon={Wallet} />
+        <StatCard title="Paiements confirmes" value={String(kpis?.confirmedPayments ?? "-")} icon={Wallet} />
+        <StatCard title="Paiements PayPal" value={String(kpis?.paypalPayments ?? "-")} icon={Wallet} />
+        <StatCard title="Virements a valider" value={String(kpis?.pendingBankTransfers ?? "-")} icon={Wallet} />
         <StatCard title="Clients actifs" value={String(kpis?.activeClients ?? "-")} icon={Users} />
         <StatCard title="Occupation flotte" value={kpis ? `${kpis.fleetOccupancyRate}%` : "-"} icon={Gauge} />
       </div>

@@ -38,6 +38,17 @@ Do not commit real values. Keep local `.env` files ignored by Git and store prod
 | `SMTP_PASS` | No | Required only for SMTP. |
 | `EMAIL_FROM` | No | Sender address for outgoing email. |
 
+## PayPal client rental payments
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `PAYPAL_MODE` | Yes | `sandbox` or `live`. |
+| `PAYPAL_CLIENT_ID` | For PayPal | Backend-only client id. Never expose it through frontend config. |
+| `PAYPAL_CLIENT_SECRET` | For PayPal | Backend-only secret. Never expose it through frontend config. |
+| `PAYPAL_CURRENCY` | Yes | Currency for client rental payments, for example `MAD`. |
+| `PAYPAL_RETURN_URL` | Yes | Frontend URL where PayPal returns after approval. |
+| `PAYPAL_CANCEL_URL` | Yes | Frontend URL where PayPal returns after cancellation. |
+
 ## Seed-only local variables
 
 | Variable | Required | Notes |

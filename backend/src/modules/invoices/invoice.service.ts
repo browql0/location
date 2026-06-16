@@ -1,4 +1,4 @@
-import { AuditAction, InvoiceStatus, InvoiceType, Prisma, ReservationStatus, UserRole } from "@prisma/client";
+import { AuditAction, InvoiceStatus, InvoiceType, PaymentRecordStatus, Prisma, ReservationStatus, UserRole } from "@prisma/client";
 import { prisma } from "../../prisma/prisma.service.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import type { AuthContext } from "../../shared/types/auth.js";
@@ -85,17 +85,23 @@ export async function generateRentalInvoice(reservationId: string, auth: AuthCon
     const existing = await tx.invoice.findFirst({ where: { reservationId, type: InvoiceType.RENTAL_INVOICE, status: { not: InvoiceStatus.CANCELLED } } });
     if (existing) throw new AppError("A rental invoice already exists for this reservation", 409, "INVOICE_ALREADY_EXISTS");
 
-    const isPaid = reservation.remainingAmount.lte(0);
+    const paymentSums = await tx.payment.aggregate({
+      where: { reservationId, status: PaymentRecordStatus.CONFIRMED },
+      _sum: { amount: true }
+    });
+    const totalPaid = new Prisma.Decimal(paymentSums._sum.amount ?? 0);
+    const remainingAmount = Prisma.Decimal.max(new Prisma.Decimal(0), reservation.totalAmount.minus(totalPaid));
+    const isPaid = remainingAmount.lte(0);
     return tx.invoice.create({
       data: {
         agencyId: reservation.agencyId,
         reservationId: reservation.id,
         type: InvoiceType.RENTAL_INVOICE,
         invoiceNumber: await nextInvoiceNumber(tx, new Date().getFullYear()),
-        status: isPaid ? InvoiceStatus.PAID : InvoiceStatus.PARTIAL,
+        status: isPaid ? InvoiceStatus.PAID : totalPaid.gt(0) ? InvoiceStatus.PARTIAL : InvoiceStatus.ISSUED,
         totalAmount: reservation.totalAmount,
-        paidAmount: reservation.advanceAmount,
-        remainingAmount: reservation.remainingAmount,
+        paidAmount: totalPaid,
+        remainingAmount,
         currency: "MAD",
         paidAt: isPaid ? new Date() : null
       },

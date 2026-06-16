@@ -65,6 +65,22 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  PAYPAL
+  CARD_MANUAL
+  CHECK
+  OTHER
+}
+
+enum PaymentRecordStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  REFUNDED
+}
+
 enum ContractStatus {
   GENERATED
   SIGNED
@@ -269,6 +285,7 @@ model Agency {
   reservations          Reservation[]
   contracts             Contract[]
   invoices              Invoice[]
+  payments              Payment[]
   incidents             Incident[]
   settings              AgencySettings?
   auditLogs             AuditLog[]
@@ -378,6 +395,7 @@ model User {
   sessions            UserSession[]
   auditLogs           AuditLog[]
   createdReservations Reservation[] @relation("ReservationCreatedBy")
+  createdPayments     Payment[]     @relation("PaymentCreatedBy")
   validatedIncidents  Incident[]    @relation("IncidentValidatedBy")
 
   lastLoginAt DateTime?
@@ -704,17 +722,38 @@ model Invoice {
 }
 
 model Payment {
-  id            String      @id @default(cuid())
-  reservationId String
-  reservation   Reservation @relation(fields: [reservationId], references: [id])
-  amount        Decimal     @db.Decimal(10, 2)
-  method        String?
-  note          String?
-  paidAt        DateTime    @default(now())
+  id                String              @id @default(cuid())
+  agencyId          String
+  agency            Agency              @relation(fields: [agencyId], references: [id])
+  reservationId     String
+  reservation       Reservation         @relation(fields: [reservationId], references: [id])
+  amount            Decimal             @db.Decimal(10, 2)
+  method            PaymentMethod
+  status            PaymentRecordStatus @default(PENDING)
+  paidAt            DateTime?
+  confirmedAt       DateTime?
+  cancelledAt       DateTime?
+  reference         String?
+  notes             String?
+  proofStorageKey   String?
+  proofFileName     String?
+  proofMimeType     String?
+  proofSize         Int?
+  paypalOrderId     String?
+  paypalCaptureId   String?
+  paypalRawResponse Json?
+  createdById       String?
+  createdBy         User?               @relation("PaymentCreatedBy", fields: [createdById], references: [id])
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  @@index([agencyId])
   @@index([reservationId])
+  @@index([status])
+  @@index([method])
+  @@index([createdAt])
+  @@index([paypalOrderId])
 }
 
 model SecurityDeposit {

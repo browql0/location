@@ -206,6 +206,12 @@ export type AgencyDashboardData = {
     reservationsMonth: number;
     revenueMonth: number;
     revenueYear: number;
+    totalCollected: number;
+    totalOutstanding: number;
+    pendingPayments: number;
+    confirmedPayments: number;
+    paypalPayments: number;
+    pendingBankTransfers: number;
     activeClients: number;
     fleetOccupancyRate: number;
     vehiclesNeedingMaintenance: number;

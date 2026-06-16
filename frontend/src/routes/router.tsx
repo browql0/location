@@ -18,6 +18,7 @@ import { MaintenanceDetailPage } from "@/pages/maintenance-detail-page";
 import { MaintenanceFormPage } from "@/pages/maintenance-form-page";
 import { MaintenancePage } from "@/pages/maintenance-page";
 import { NotFoundPage } from "@/pages/not-found-page";
+import { PaymentsPage } from "@/pages/payments-page";
 import { ProfilePage } from "@/pages/profile-page";
 import { RegisterAgencyPage } from "@/pages/register-agency-page";
 import { ReservationDetailPage } from "@/pages/reservation-detail-page";
@@ -207,6 +208,12 @@ export const router = createBrowserRouter([
                 element: <PermissionGuard permissions={["maintenance:update"]} />,
                 children: [
                   { path: "maintenance/:id/edit", element: <MaintenanceFormPage /> }
+                ]
+              },
+              {
+                element: <PermissionGuard permissions={["payments:read"]} />,
+                children: [
+                  { path: "payments", element: <PaymentsPage /> }
                 ]
               },
               {

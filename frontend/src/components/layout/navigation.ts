@@ -68,6 +68,7 @@ const agencyNavigationGroups: NavGroup[] = [
       { label: "Voitures", href: "/cars", icon: Car, permission: "cars:read" },
       { label: "Clients", href: "/clients", icon: Users, permission: "clients:read" },
       { label: "Reservations", href: "/reservations", icon: CalendarClock, permission: "reservations:read" },
+      { label: "Paiements", href: "/payments", icon: CreditCard, permission: "payments:read" },
       { label: "Maintenance", href: "/maintenance", icon: Wrench, permission: "maintenance:read" },
       { label: "Alertes vehicules", href: "/vehicle-alerts", icon: AlertTriangle, permission: "maintenance:read" }
     ]
@@ -76,6 +77,7 @@ const agencyNavigationGroups: NavGroup[] = [
     label: "Finance",
     items: [
       { label: "Factures", href: "/invoices", icon: FileText, permission: "invoices:read" },
+      { label: "Paiements", href: "/payments", icon: CreditCard, permission: "payments:read" },
       { label: "Contrats", href: "/contracts", icon: FileText, permission: "contracts:read" }
     ]
   },

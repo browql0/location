@@ -30,7 +30,13 @@ const envSchema = z.object({
   SMTP_PORT: z.preprocess((value) => (value === "" ? undefined : value), z.coerce.number().int().positive().optional()),
   SMTP_USER: z.string().optional().default(""),
   SMTP_PASS: z.string().optional().default(""),
-  EMAIL_FROM: z.string().optional().default("")
+  EMAIL_FROM: z.string().optional().default(""),
+  PAYPAL_MODE: z.enum(["sandbox", "live"]).default("sandbox"),
+  PAYPAL_CLIENT_ID: z.string().optional().default(""),
+  PAYPAL_CLIENT_SECRET: z.string().optional().default(""),
+  PAYPAL_CURRENCY: z.string().default("MAD"),
+  PAYPAL_RETURN_URL: z.string().url().default("http://localhost:5173/reservations"),
+  PAYPAL_CANCEL_URL: z.string().url().default("http://localhost:5173/reservations")
 }).superRefine((value, ctx) => {
   if (value.NODE_ENV !== "production") return;
 
@@ -72,6 +78,14 @@ const envSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["CORS_ORIGIN"],
       message: "CORS_ORIGIN must include FRONTEND_APP_URL in production"
+    });
+  }
+
+  if (value.PAYPAL_MODE === "live" && (!value.PAYPAL_CLIENT_ID || !value.PAYPAL_CLIENT_SECRET)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["PAYPAL_CLIENT_ID"],
+      message: "PayPal live mode requires PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET"
     });
   }
 });
