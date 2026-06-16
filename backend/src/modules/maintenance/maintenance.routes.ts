@@ -1,7 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
-import { uploadRateLimit } from "../../middlewares/rate-limit.middleware.js";
+import { sensitiveDownloadRateLimit, uploadRateLimit } from "../../middlewares/rate-limit.middleware.js";
 import { requireActiveSubscription } from "../../middlewares/subscription.middleware.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import { isAllowedMaintenanceDocumentFile } from "../files/file-storage.service.js";
@@ -27,7 +27,7 @@ maintenanceRouter.use(requireActiveSubscription);
 maintenanceRouter.get("/", controller.listMaintenance);
 maintenanceRouter.post("/", controller.createMaintenance);
 maintenanceRouter.get("/calendar", controller.calendar);
-maintenanceRouter.get("/documents/:id/download", controller.downloadDocument);
+maintenanceRouter.get("/documents/:id/download", sensitiveDownloadRateLimit, controller.downloadDocument);
 maintenanceRouter.delete("/documents/:id", controller.deleteDocument);
 maintenanceRouter.get("/:id", controller.getMaintenance);
 maintenanceRouter.patch("/:id", controller.updateMaintenance);

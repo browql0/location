@@ -6,6 +6,7 @@ import morgan from "morgan";
 import { corsOptions } from "./config/cors.js";
 import { env } from "./config/env.js";
 import { errorMiddleware } from "./middlewares/error.middleware.js";
+import { globalApiRateLimit } from "./middlewares/rate-limit.middleware.js";
 import { notFoundMiddleware } from "./middlewares/not-found.middleware.js";
 import { healthRouter } from "./modules/health/health.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
@@ -24,7 +25,28 @@ import { vehicleAnomalyRouter } from "./modules/vehicle-anomalies/vehicle-anomal
 
 export const app = express();
 
-app.use(helmet());
+app.disable("x-powered-by");
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        "default-src": ["'self'"],
+        "base-uri": ["'self'"],
+        "frame-ancestors": ["'none'"],
+        "object-src": ["'none'"],
+        "script-src": ["'self'"],
+        "style-src": ["'self'", "'unsafe-inline'"],
+        "img-src": ["'self'", "data:", "blob:"],
+        "connect-src": ["'self'", env.FRONTEND_APP_URL]
+      }
+    },
+    frameguard: { action: "deny" },
+    hidePoweredBy: true,
+    noSniff: true,
+    referrerPolicy: { policy: "no-referrer" }
+  })
+);
 app.use(cors(corsOptions));
 app.use(cookieParser());
 app.use(express.json({ limit: "2mb" }));
@@ -34,6 +56,7 @@ if (env.NODE_ENV !== "test") {
   app.use(morgan("dev"));
 }
 
+app.use(env.API_PREFIX, globalApiRateLimit);
 app.use(`${env.API_PREFIX}/health`, healthRouter);
 app.use(`${env.API_PREFIX}/auth`, authRouter);
 app.use(`${env.API_PREFIX}/dashboard`, dashboardRouter);

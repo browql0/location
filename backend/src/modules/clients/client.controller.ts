@@ -1,5 +1,6 @@
 import type { Request, RequestHandler, Response } from "express";
 import { asyncHandler } from "../../middlewares/async-handler.js";
+import { attachmentDisposition } from "../../shared/utils/http.js";
 import { clientQuerySchema, createClientDocumentSchema } from "./client.schemas.js";
 import * as service from "./client.service.js";
 
@@ -43,7 +44,7 @@ export const addDocument: RequestHandler = asyncHandler(async (req: Request, res
 export const downloadDocument: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
   const { document, stream } = await service.getDocumentDownload(String(req.params.documentId), req.auth!, requestMeta(req));
   res.setHeader("Content-Type", document.mimeType);
-  res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(document.fileName)}"`);
+  res.setHeader("Content-Disposition", attachmentDisposition(document.fileName, "client-document"));
   stream.pipe(res);
 });
 

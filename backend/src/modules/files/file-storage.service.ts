@@ -34,8 +34,17 @@ export interface FileStorageProvider {
   getFileStream(storageKey: string): Promise<Readable>;
 }
 
-const allowedExtensions = new Set([".pdf", ".png", ".jpg", ".jpeg"]);
+const allowedDocumentExtensions = new Set([".pdf", ".png", ".jpg", ".jpeg"]);
+const allowedPhotoExtensions = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 const allowedStoragePrefixes = ["clients/", "cars/", "agency-logos/", "maintenance/", "expenses/", "contracts/", "invoices/"];
+
+const maxBytesByMimeType = new Map([
+  ["application/pdf", 10 * 1024 * 1024],
+  ["image/png", 5 * 1024 * 1024],
+  ["image/jpeg", 5 * 1024 * 1024],
+  ["image/jpg", 5 * 1024 * 1024],
+  ["image/webp", 5 * 1024 * 1024]
+]);
 
 function extensionFor(originalName: string) {
   return path.extname(originalName).toLowerCase();
@@ -68,6 +77,26 @@ function assertSafeStorageKey(storageKey: string) {
   }
 }
 
+function hasMagicBytes(file: Express.Multer.File) {
+  const bytes = file.buffer.subarray(0, 12);
+  if (file.mimetype === "application/pdf") return bytes.subarray(0, 4).equals(Buffer.from("%PDF"));
+  if (file.mimetype === "image/png") return bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  if (file.mimetype === "image/jpeg" || file.mimetype === "image/jpg") return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  if (file.mimetype === "image/webp") return bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP";
+  return false;
+}
+
+function assertAllowedUploadedFile(file: Express.Multer.File) {
+  const maxBytes = maxBytesByMimeType.get(file.mimetype);
+  if (!maxBytes) throw new AppError("Unsupported file type", 400, "FILE_UNSUPPORTED_TYPE");
+  if (file.size <= 0 || file.size > maxBytes) {
+    throw new AppError("Invalid file size", 400, "FILE_INVALID_SIZE", { maxBytes });
+  }
+  if (!hasMagicBytes(file)) {
+    throw new AppError("File content does not match its declared type", 400, "FILE_SIGNATURE_MISMATCH");
+  }
+}
+
 class R2StorageProvider implements FileStorageProvider {
   private readonly client: S3Client;
 
@@ -83,6 +112,7 @@ class R2StorageProvider implements FileStorageProvider {
   }
 
   async saveFile(file: Express.Multer.File, options: Omit<SaveFileOptions, "file">) {
+    assertAllowedUploadedFile(file);
     const storageKey = storageKeyFor(options, file.originalname);
     await this.putObject(storageKey, file.buffer, file.mimetype, file.size);
     return { storageKey };
@@ -143,7 +173,7 @@ export function isAllowedClientDocumentFile(file: Pick<Express.Multer.File, "mim
   const allowedMimeTypes = new Set(["application/pdf", "image/png", "image/jpeg", "image/jpg"]);
   const ext = extensionFor(file.originalname);
   if (!file.mimetype || !allowedMimeTypes.has(file.mimetype)) return false;
-  if (!allowedExtensions.has(ext)) return false;
+  if (!allowedDocumentExtensions.has(ext)) return false;
   if (file.mimetype === "application/pdf") return ext === ".pdf";
   if (file.mimetype === "image/png") return ext === ".png";
   if (file.mimetype === "image/jpeg" || file.mimetype === "image/jpg") return ext === ".jpg" || ext === ".jpeg";
@@ -154,7 +184,7 @@ export function isAllowedCarPhotoFile(file: Pick<Express.Multer.File, "mimetype"
   const allowedMimeTypes = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp"]);
   const ext = extensionFor(file.originalname);
   if (!file.mimetype || !allowedMimeTypes.has(file.mimetype)) return false;
-  if (![".png", ".jpg", ".jpeg", ".webp"].includes(ext)) return false;
+  if (!allowedPhotoExtensions.has(ext)) return false;
   if (file.mimetype === "image/png") return ext === ".png";
   if (file.mimetype === "image/webp") return ext === ".webp";
   if (file.mimetype === "image/jpeg" || file.mimetype === "image/jpg") return ext === ".jpg" || ext === ".jpeg";

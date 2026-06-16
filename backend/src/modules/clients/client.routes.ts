@@ -1,7 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
-import { uploadRateLimit } from "../../middlewares/rate-limit.middleware.js";
+import { sensitiveDownloadRateLimit, uploadRateLimit } from "../../middlewares/rate-limit.middleware.js";
 import { requireActiveSubscription } from "../../middlewares/subscription.middleware.js";
 import { validateBody } from "../../middlewares/validate.middleware.js";
 import { AppError } from "../../shared/errors/app-error.js";
@@ -28,7 +28,7 @@ clientRouter.use(requireActiveSubscription);
 clientRouter.get("/", controller.listClients);
 clientRouter.post("/", validateBody(createClientSchema), controller.createClient);
 clientRouter.get("/risk-check", controller.riskCheck);
-clientRouter.get("/documents/:documentId/download", controller.downloadDocument);
+clientRouter.get("/documents/:documentId/download", sensitiveDownloadRateLimit, controller.downloadDocument);
 clientRouter.delete("/documents/:documentId", controller.deleteDocument);
 clientRouter.get("/:id/summary", controller.getClientSummary);
 clientRouter.get("/:id", controller.getClient);

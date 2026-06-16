@@ -1,5 +1,6 @@
 import type { Request, RequestHandler, Response } from "express";
 import { asyncHandler } from "../../middlewares/async-handler.js";
+import { attachmentDisposition } from "../../shared/utils/http.js";
 import { invoiceQuerySchema } from "./invoice.schemas.js";
 import * as service from "./invoice.service.js";
 
@@ -26,7 +27,7 @@ export const generateSaasInvoice: RequestHandler = asyncHandler(async (req: Requ
 export const downloadInvoice: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
   const file = await service.downloadInvoice(String(req.params.id), req.auth!, requestMeta(req));
   res.setHeader("Content-Type", file.contentType);
-  res.setHeader("Content-Disposition", `attachment; filename="${file.fileName}"`);
+  res.setHeader("Content-Disposition", attachmentDisposition(file.fileName, "invoice.pdf"));
   file.stream.pipe(res);
 });
 

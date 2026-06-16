@@ -1,6 +1,7 @@
 import type { Request, RequestHandler, Response } from "express";
 import { CarStatus } from "@prisma/client";
 import { asyncHandler } from "../../middlewares/async-handler.js";
+import { attachmentDisposition, inlineDisposition } from "../../shared/utils/http.js";
 import { carQuerySchema, createCarDocumentSchema } from "./car.schemas.js";
 import * as service from "./car.service.js";
 
@@ -63,7 +64,7 @@ export const downloadPhoto: RequestHandler = asyncHandler(async (req: Request, r
     return;
   }
   res.setHeader("Content-Type", photo.mimeType ?? "application/octet-stream");
-  res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(photo.fileName ?? "car-photo")}"`);
+  res.setHeader("Content-Disposition", inlineDisposition(photo.fileName ?? "car-photo", "car-photo"));
   stream.pipe(res);
 });
 
@@ -78,7 +79,7 @@ export const addDocument: RequestHandler = asyncHandler(async (req: Request, res
 export const downloadDocument: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
   const { document, stream } = await service.getDocumentDownload(String(req.params.id), req.auth!);
   res.setHeader("Content-Type", document.mimeType ?? "application/octet-stream");
-  res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(document.fileName)}"`);
+  res.setHeader("Content-Disposition", attachmentDisposition(document.fileName, "car-document"));
   stream.pipe(res);
 });
 
